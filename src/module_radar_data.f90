@@ -63,7 +63,7 @@ contains
    is=index(filename, "/", back=.TRUE.)
    is=is+1
    base_name =filename(is:)
-   write(*,*) trim(filename), is, trim(base_name)
+   !write(*,*) trim(filename), is, trim(base_name)
    radar_id  ="Z----"
 
    if((base_name(1:6)/="Z_RADR").and.(base_name(1:6)/="T_RADR"))then
@@ -1511,9 +1511,9 @@ contains
 
          rdat%vcp = get_us_value(data_98d%us_VcpNumber)
          date_now       = get_new_date(d1970,   (get_us_value(data_98d%us_JulianDate)-1)*one_day)
-         write(601,*) "1",date_now, (get_us_value(data_98d%us_JulianDate)-1)*one_day
+         !write(601,*) "1",date_now, (get_us_value(data_98d%us_JulianDate)-1)*one_day
          date_now       = get_new_date(date_now, get_ui_value(data_98d%ui_mSeconds)/1000.)
-         write(601,*) "2",date_now, get_ui_value(data_98d%ui_mSeconds)/1000., get_ui_value(data_98d%ui_mSeconds)
+         !write(601,*) "2",date_now, get_ui_value(data_98d%ui_mSeconds)/1000., get_ui_value(data_98d%ui_mSeconds)
          
          btime=(get_us_value(data_98d%us_JulianDate)-1)*DBLE(one_day)+get_ui_value(data_98d%ui_mSeconds)/1000.
 
@@ -1530,9 +1530,9 @@ contains
          rdat%Minute = date_utc%Minute
          rdat%Second = date_utc%Second
 
-      write(601,*) "Start_Vol:", btime,  rdat%Year, rdat%Month, rdat%Day, rdat%Hour, rdat%Minute, rdat%Second
+      !write(601,*) "Start_Vol:", btime,  rdat%Year, rdat%Month, rdat%Day, rdat%Hour, rdat%Minute, rdat%Second
       endif
-      write(601,*) "Status:",RadialStatus, (get_us_value(data_98d%us_JulianDate)-1)*int(one_day)+get_ui_value(data_98d%ui_mSeconds)/1000,( (get_us_value(data_98d%us_JulianDate)-1)*one_day+get_ui_value(data_98d%ui_mSeconds)/1000.)-(8*one_hour)
+      !write(601,*) "Status:",RadialStatus, (get_us_value(data_98d%us_JulianDate)-1)*int(one_day)+get_ui_value(data_98d%ui_mSeconds)/1000,( (get_us_value(data_98d%us_JulianDate)-1)*one_day+get_ui_value(data_98d%ui_mSeconds)/1000.)-(8*one_hour)
       if(.NOT.VolBeg) cycle
 
       ! Start an elevation
@@ -1582,7 +1582,7 @@ contains
          rdat%etime (AzIndex, ElIndex) = ctime -DBLE(8*one_hour)
       endif
 
-      write(601,*) AzIndex, ElIndex, ctime, rdat%stime (AzIndex, ElIndex)
+      !write(601,*) AzIndex, ElIndex, ctime, rdat%stime (AzIndex, ElIndex)
       if(RadialStatus == ELV_END)then
          rdat%nazim(ElIndex) = AzIndex
 !        write(*,*) "NAzim(",ElIndex,")=",AzIndex
@@ -2676,9 +2676,9 @@ contains
    do m=1, n_radial 
       j=get_i_value(radial_header(m)%i_radial_number)
       k=get_i_value(radial_header(m)%i_elevation_number)
-      write(601,"(5I8,2F10.2,I12,I5)") m,  get_i_value(radial_header(m)%i_radial_state),get_i_value(radial_header(m)%i_spot_blank),&
-                          j,k,get_f_value(radial_header(m)%f_elevation   ),get_f_value(radial_header(m)%f_azimuth   ),&
-                          get_i_value(radial_header(m)%i_seconds),get_i_value(radial_header(m)%i_microseconds)
+      !write(601,"(5I8,2F10.2,I12,I5)") m,  get_i_value(radial_header(m)%i_radial_state),get_i_value(radial_header(m)%i_spot_blank),&
+      !                    j,k,get_f_value(radial_header(m)%f_elevation   ),get_f_value(radial_header(m)%f_azimuth   ),&
+      !                    get_i_value(radial_header(m)%i_seconds),get_i_value(radial_header(m)%i_microseconds)
       do n=1, n_moment(m) 
             nbyte      = get_s_value(moment_header(m,n)%s_bin_length)
             len_record = get_i_value(moment_header(m,n)%i_length)/nbyte
