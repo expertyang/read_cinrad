@@ -111,6 +111,7 @@ contains
    else
       radar_data%file_format="98D"
    endif   
+   !  radar_data%file_format="RSTM"
 
    select case(trim(radar_data%file_format))
    case ("98D")
@@ -1380,22 +1381,22 @@ contains
 
    if_checked=.false.
    inquire(file=filename,size=filesize)
-   if(MOD(filesize,132+RGates_SA+VGates_SA+WGates_SA)==0)then
+   if(MOD(filesize,132+RGates_SA+VGates_SA+WGates_SA)==0)then ! 2432
       if(radar_type/="SA".and.radar_type/="SB")then
          radar_type="SA"
          if_checked=.true.
-      endif
-   elseif(MOD(filesize,132+RGates_CB+VGates_CB+WGates_CB)==0)then
+      endif 
+   elseif(MOD(filesize,132+RGates_CB+VGates_CB+WGates_CB)==0)then ! 4132
       if(radar_type/="CA".and.radar_type/="CB")then
          radar_type="CB"
          if_checked=.true.
       endif
-   elseif(MOD(filesize,132+RGates_SC+VGates_SC+WGates_SC)==0)then
+   elseif(MOD(filesize,132+RGates_SC+VGates_SC+WGates_SC)==0)then ! 3132
       if(radar_type/="SC".and.radar_type/="CD")then
          radar_type="SC"
          if_checked=.true.
       endif
-   elseif(MOD(filesize,132+RGates_CC+VGates_CC+WGates_CC)==0)then
+   elseif(MOD(filesize,132+RGates_CC+VGates_CC+WGates_CC)==0)then ! 1632
       if(radar_type/="CC")then
          radar_type="CC"
          if_checked=.true.
@@ -1498,10 +1499,46 @@ contains
                                             data_98d%uc_temp
 
       if(ierr/=0) exit
+      ! Check data
+      if (get_us_value(data_98d%us_RadialStatus)==0.and.get_us_value(data_98d%us_El)==0.and.get_us_value(data_98d%us_JulianDate)==0)then
+         write(602,*) irec, get_us_value(data_98d%us_RadarStatus), &
+                            get_us_value(data_98d%ui_mSeconds), &
+                            get_us_value(data_98d%us_JulianDate), &
+                            get_us_value(data_98d%us_URange), &
+                            get_us_value(data_98d%us_Az), &
+                            get_us_value(data_98d%us_RadialNumber), &
+                            get_us_value(data_98d%us_RadialStatus), &
+                            get_us_value(data_98d%us_El), &
+                            get_us_value(data_98d%us_ElNumber), &
+                            get_us_value(data_98d% s_RangeToFirstGateOfRef), &
+                            get_us_value(data_98d% s_RangeToFirstGateOfDop), &
+                            get_us_value(data_98d%us_GateSizeOfReflectivity),&
+                            get_us_value(data_98d%us_GateSizeOfDoppler), &
+                            get_us_value(data_98d%us_GatesNumberOfReflectivity),&
+                            get_us_value(data_98d%us_GatesNumberOfDoppler), &
+                            get_us_value(data_98d%us_CutSectorNumber), &
+                            get_us_value(data_98d%ui_CalibrationConst), &
+                            get_us_value(data_98d%us_PtrOfReflectivity), &
+                            get_us_value(data_98d%us_PtrOfVelocity), &
+                            get_us_value(data_98d%us_PtrOfSpectrumWidth), &
+                            get_us_value(data_98d%us_ResolutionOfVelocity), &
+                            get_us_value(data_98d%us_VcpNumber), &
+                            get_us_value(data_98d%us_PtrOfArcReflectivity), &
+                            get_us_value(data_98d%us_PtrOfArcVelocity), &
+                            get_us_value(data_98d%us_PtrOfArcWidth), &
+                            get_us_value(data_98d%us_Nyquist), &
+                            get_us_value(data_98d%us_AAF), &
+                            get_us_value(data_98d%us_CircleTotal)
+
+         cycle
+      endif
       RadialStatus=get_us_value(data_98d%us_RadialStatus)
 
       !write(*,*) 'data_98d%ui_CalibrationConst"',get_f_value(data_98d%ui_CalibrationConst),',data_98d%us_AAF:"',get_s_value(data_98d%us_AAF)
       ! Start a volume scan
+      write(601,*) irec, "RadialStatus:", RadialStatus, "VOL_BEG=3, VOL_END=4, ELV_BEG=0, ELV_END=2"
+
+      
       if(RadialStatus == VOL_BEG)then
 
          VolBeg = .true.
@@ -1530,7 +1567,7 @@ contains
          rdat%Minute = date_utc%Minute
          rdat%Second = date_utc%Second
 
-      !write(601,*) "Start_Vol:", btime,  rdat%Year, rdat%Month, rdat%Day, rdat%Hour, rdat%Minute, rdat%Second
+         write(601,*) "Start_Vol:", btime,  rdat%Year, rdat%Month, rdat%Day, rdat%Hour, rdat%Minute, rdat%Second
       endif
       !write(601,*) "Status:",RadialStatus, (get_us_value(data_98d%us_JulianDate)-1)*int(one_day)+get_ui_value(data_98d%ui_mSeconds)/1000,( (get_us_value(data_98d%us_JulianDate)-1)*one_day+get_ui_value(data_98d%ui_mSeconds)/1000.)-(8*one_hour)
       if(.NOT.VolBeg) cycle
@@ -1546,7 +1583,6 @@ contains
          ElIndex = get_us_value(data_98d%us_ElNumber)
 
          rdat%atmosAttenFactor(ElIndex) = get_s_value(data_98d%us_AAF)/1000.
-         !write(*,*) ElIndex,get_s_value(data_98d%us_AAF),rdat%atmosAttenFactor(ElIndex)
 
          rdat%vmax   (ElIndex) = get_us_value(data_98d%us_Nyquist)/100.
          rdat%rmax   (ElIndex) = get_us_value(data_98d%us_URange )*100. 
@@ -1556,12 +1592,14 @@ contains
          rdat%vgatesp(ElIndex) = get_us_value(data_98d%us_GateSizeOfDoppler)
 
          NewElv=.false.
+         write(601,*) "New Elv:", ElIndex, CurEl,get_s_value(data_98d%us_AAF),rdat%atmosAttenFactor(ElIndex)
       endif
 
       ! Calculate azimuth angle and Azimuth Index
       CurAz = (get_us_value(data_98d%us_Az)/8.)*(180./4096.)
       if(CurAz >= 360.) CurAz = CurAz-360.
       AzIndex = get_us_value(data_98d%us_RadialNumber) 
+      write(601,*) "Az Index:", AzIndex, CurAz
 
       if(RadialStatus == VOL_END)then
          VolEnd=.true.
@@ -1582,7 +1620,7 @@ contains
          rdat%etime (AzIndex, ElIndex) = ctime -DBLE(8*one_hour)
       endif
 
-      !write(601,*) AzIndex, ElIndex, ctime, rdat%stime (AzIndex, ElIndex)
+      write(601,*) AzIndex, ElIndex, ctime, rdat%stime (AzIndex, ElIndex)
       if(RadialStatus == ELV_END)then
          rdat%nazim(ElIndex) = AzIndex
 !        write(*,*) "NAzim(",ElIndex,")=",AzIndex
@@ -2008,7 +2046,7 @@ contains
    case ("CC")
    case default
       write(*,*) "in read_radar_rd:Unknown Radar Type:", trim(radar_type)
-      stop
+!     stop
    end select
 
    ! read in header only
