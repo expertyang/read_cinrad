@@ -39,14 +39,17 @@ implicit none
       ! Dimension Gate, Azim, Tilt
       integer                                           :: ntilt
       integer      , dimension(:    )     , allocatable :: nazim             ! azimuth number of each tilt
-      logical      , dimension(:    )     , allocatable :: ifref   , ifvel
+      logical      , dimension(:    )     , allocatable :: ifref, ifvel, ifzdr, ifcc, iffdp, ifkdp, ifsnr
       integer      , dimension(: , :)     , allocatable :: nrgate  , nvgate  ! Velocity Resolution
       real         , dimension(:    )     , allocatable :: rgatesp , vgatesp, atmosAttenFactor
       real         , dimension(:    )     , allocatable ::  rmax   , vmax
       real         , dimension(: , :)     , allocatable :: rtilt   , razim   ! elevation angle and azimuth angle of each ray
       real(kind=8) , dimension(: , :)     , allocatable :: stime   , etime   ! scan start and end time: seconds since 1970-1-1 00:00:00.00
       real         , dimension(: , :)     , allocatable :: vres              ! Radical velocity resolution , (metstar 98d)
-      real         , dimension(: , : , :) , allocatable :: vel  , ref  , spw
+      real         , dimension(: , : , :) , allocatable :: vel  , ref  , spw, zdr, kdp, cc, fdp, snr
+      real         , dimension(: , : , :) , allocatable :: vlon , vlat , valt
+      real         , dimension(: , : , :) , allocatable :: rlon , rlat , ralt
+      logical                                           :: if_have_loc
    end type
 
 
@@ -140,8 +143,8 @@ contains
 
    write(*,"(A,2F12.4,F8.1)") "Lat,Lon,Alt:", radar_data%latitude, radar_data%longitude, radar_data%altitude 
    write(*,"(1(A,I10),2A  )") "Total Tilts:", radar_data%ntilt, ". File Format:",trim(radar_data%file_format)
-   write(*,"(1X,A9,2(',',1X,A5),3(',',2X,A8),4(',',1X,A11),2(',',1X,A5))") &
-           "Elevation","IfRef","IfVel","NAzimuth","NRefGate","NVelGate","RefGateSize","VelGateSize",&
+   write(*,"(1X,A9,6(',',1X,A3),3(',',2X,A8),4(',',1X,A11),2(',',1X,A5))") &
+           "Elevation","Z","V","Zdr","CC","Kdp","SNR","NAzimuth","NRefGate","NVelGate","RefGateSize","VelGateSize",&
            "MaxRange(m)","MaxVel(m/s)","NRMax","NVMax"
   
    nrgate=ubound(radar_data%ref,dim=1)
@@ -169,10 +172,14 @@ contains
             radar_data%spw(nvmax+1:nvgate,:,k)=VALUE_INVALID
          endif
       endif
-      write(*,"(F10.4,2(',',L6),3(',',I10),4(',',F12.2),2(',',I6))") & 
+      write(*,"(F10.4,6(',',L4),3(',',I10),4(',',F12.2),2(',',I6))") & 
                          radar_data%rtilt (1,k), &
                          radar_data%ifref   (k), &
                          radar_data%ifvel   (k), &
+                         radar_data%ifzdr   (k), &
+                         radar_data%ifcc    (k), &
+                         radar_data%ifkdp   (k), &
+                         radar_data%ifsnr   (k), &
                          radar_data%nazim   (k), &
                          radar_data%nrgate(1,k), &
                          radar_data%nvgate(1,k), &
@@ -363,12 +370,22 @@ contains
       deallocate(radar_data%ref             )
       deallocate(radar_data%vel             )
       deallocate(radar_data%spw             )
+      deallocate(radar_data%rlon            )
+      deallocate(radar_data%rlat            )
+      deallocate(radar_data%ralt            )
+      deallocate(radar_data%vlon            )
+      deallocate(radar_data%vlat            )
+      deallocate(radar_data%valt            )
       deallocate(radar_data%atmosAttenFactor)
    endif
    !write(*,*) "deallocate complete!!!"
    allocate(radar_data%nazim                   (MaxCuts))
    allocate(radar_data%ifvel                   (MaxCuts))
    allocate(radar_data%ifref                   (MaxCuts))
+   allocate(radar_data%ifzdr                   (MaxCuts))
+   allocate(radar_data%ifcc                    (MaxCuts))
+   allocate(radar_data%ifkdp                   (MaxCuts))
+   allocate(radar_data%ifsnr                   (MaxCuts))
    allocate(radar_data%vmax                    (MaxCuts))
    allocate(radar_data%rmax                    (MaxCuts))
    allocate(radar_data%rgatesp                 (MaxCuts))
@@ -384,11 +401,33 @@ contains
    allocate(radar_data%ref    (RGates, MaxRads, MaxCuts))
    allocate(radar_data%vel    (VGates, MaxRads, MaxCuts))
    allocate(radar_data%spw    (WGates, MaxRads, MaxCuts))
+   allocate(radar_data%rlon   (RGates, MaxRads, MaxCuts))
+   allocate(radar_data%rlat   (RGates, MaxRads, MaxCuts))
+   allocate(radar_data%ralt   (RGates, MaxRads, MaxCuts))
+   allocate(radar_data%vlon   (VGates, MaxRads, MaxCuts))
+   allocate(radar_data%vlat   (VGates, MaxRads, MaxCuts))
+   allocate(radar_data%valt   (VGates, MaxRads, MaxCuts))
+   allocate(radar_data%zdr    (RGates, MaxRads, MaxCuts))
+   allocate(radar_data%cc     (RGates, MaxRads, MaxCuts))
+   allocate(radar_data%fdp    (RGates, MaxRads, MaxCuts))
+   allocate(radar_data%kdp    (RGates, MaxRads, MaxCuts))
+   allocate(radar_data%snr    (RGates, MaxRads, MaxCuts))
 
    !write(*,*) "allocate complete!!!"
    radar_data%ref   = VALUE_INVALID
    radar_data%vel   = VALUE_INVALID
    radar_data%spw   = VALUE_INVALID
+   radar_data%zdr   = VALUE_INVALID
+   radar_data%cc    = VALUE_INVALID
+   radar_data%fdp   = VALUE_INVALID
+   radar_data%kdp   = VALUE_INVALID
+   radar_data%snr   = VALUE_INVALID
+   radar_data%rlon  = VALUE_INVALID
+   radar_data%rlat  = VALUE_INVALID
+   radar_data%ralt  = VALUE_INVALID
+   radar_data%vlon  = VALUE_INVALID
+   radar_data%vlat  = VALUE_INVALID
+   radar_data%valt  = VALUE_INVALID
 
    radar_data%nazim            = 0
    radar_data%nvgate           = 0
@@ -396,10 +435,16 @@ contains
    radar_data%stime            = 0
    radar_data%etime            = 0
    radar_data%vres             = 1
-   radar_data%ifref            = .false.
-   radar_data%ifvel            = .false.
    radar_data%atmosAttenFactor = 0
    radar_data%calibConst       = 0
+
+
+   radar_data%ifref=.false.
+   radar_data%ifvel=.false.
+   radar_data%ifzdr=.false.
+   radar_data%ifcc =.false.
+   radar_data%ifkdp=.false.
+   radar_data%ifsnr=.false.
    !write(*,*) "out allocate"
    end subroutine
 
@@ -1377,6 +1422,8 @@ contains
    logical    :: VolBeg, RFlag, VFlag, WFlag, VolEnd, NewElv, if_checked
    integer(kind=8) :: btime, ctime
    
+   integer :: i
+
    ! check radar type
 
    if_checked=.false.
@@ -1501,35 +1548,6 @@ contains
       if(ierr/=0) exit
       ! Check data
       if (get_us_value(data_98d%us_RadialStatus)==0.and.get_us_value(data_98d%us_El)==0.and.get_us_value(data_98d%us_JulianDate)==0)then
-         write(602,*) irec, get_us_value(data_98d%us_RadarStatus), &
-                            get_us_value(data_98d%ui_mSeconds), &
-                            get_us_value(data_98d%us_JulianDate), &
-                            get_us_value(data_98d%us_URange), &
-                            get_us_value(data_98d%us_Az), &
-                            get_us_value(data_98d%us_RadialNumber), &
-                            get_us_value(data_98d%us_RadialStatus), &
-                            get_us_value(data_98d%us_El), &
-                            get_us_value(data_98d%us_ElNumber), &
-                            get_us_value(data_98d% s_RangeToFirstGateOfRef), &
-                            get_us_value(data_98d% s_RangeToFirstGateOfDop), &
-                            get_us_value(data_98d%us_GateSizeOfReflectivity),&
-                            get_us_value(data_98d%us_GateSizeOfDoppler), &
-                            get_us_value(data_98d%us_GatesNumberOfReflectivity),&
-                            get_us_value(data_98d%us_GatesNumberOfDoppler), &
-                            get_us_value(data_98d%us_CutSectorNumber), &
-                            get_us_value(data_98d%ui_CalibrationConst), &
-                            get_us_value(data_98d%us_PtrOfReflectivity), &
-                            get_us_value(data_98d%us_PtrOfVelocity), &
-                            get_us_value(data_98d%us_PtrOfSpectrumWidth), &
-                            get_us_value(data_98d%us_ResolutionOfVelocity), &
-                            get_us_value(data_98d%us_VcpNumber), &
-                            get_us_value(data_98d%us_PtrOfArcReflectivity), &
-                            get_us_value(data_98d%us_PtrOfArcVelocity), &
-                            get_us_value(data_98d%us_PtrOfArcWidth), &
-                            get_us_value(data_98d%us_Nyquist), &
-                            get_us_value(data_98d%us_AAF), &
-                            get_us_value(data_98d%us_CircleTotal)
-
          cycle
       endif
       RadialStatus=get_us_value(data_98d%us_RadialStatus)
@@ -1540,6 +1558,42 @@ contains
 
       
       if(RadialStatus == VOL_BEG)then
+
+         write(602,*) "us_RadarStatus              : ",  get_us_value(data_98d%us_RadarStatus)
+         write(602,*) "ui_mSeconds                 : ",  get_ui_value(data_98d%ui_mSeconds)
+         write(602,*) "us_JulianDate               : ",  get_us_value(data_98d%us_JulianDate)
+         write(602,*) "us_URange                   : ",  get_us_value(data_98d%us_URange)
+         write(602,*) "us_Az                       : ",  get_us_value(data_98d%us_Az)
+         write(602,*) "us_RadialNumber             : ",  get_us_value(data_98d%us_RadialNumber)
+         write(602,*) "us_RadialStatus             : ",  get_us_value(data_98d%us_RadialStatus)
+         write(602,*) "us_El                       : ",  get_us_value(data_98d%us_El)
+         write(602,*) "us_ElNumber                 : ",  get_us_value(data_98d%us_ElNumber)
+         write(602,*) " s_RangeToFirstGateOfRef    : ",  get_s_value (data_98d% s_RangeToFirstGateOfRef)
+         write(602,*) " s_RangeToFirstGateOfDop    : ",  get_s_value (data_98d% s_RangeToFirstGateOfDop)
+         write(602,*) "us_GateSizeOfReflectivity   : ",  get_us_value(data_98d%us_GateSizeOfReflectivity)
+         write(602,*) "us_GateSizeOfDoppler        : ",  get_us_value(data_98d%us_GateSizeOfDoppler)
+         write(602,*) "us_GatesNumberOfReflectivity: ",  get_us_value(data_98d%us_GatesNumberOfReflectivity)
+         write(602,*) "us_GatesNumberOfDoppler     : ",  get_us_value(data_98d%us_GatesNumberOfDoppler)
+         write(602,*) "us_CutSectorNumber          : ",  get_us_value(data_98d%us_CutSectorNumber)
+         write(602,*) "ui_CalibrationConst         : ",  get_us_value(data_98d%ui_CalibrationConst)
+         write(602,*) "us_PtrOfReflectivity        : ",  get_us_value(data_98d%us_PtrOfReflectivity)
+         write(602,*) "us_PtrOfVelocity            : ",  get_us_value(data_98d%us_PtrOfVelocity)
+         write(602,*) "us_PtrOfSpectrumWidth       : ",  get_us_value(data_98d%us_PtrOfSpectrumWidth)
+         write(602,*) "us_ResolutionOfVelocity     : ",  get_us_value(data_98d%us_ResolutionOfVelocity)
+         write(602,*) "us_VcpNumber                : ",  get_us_value(data_98d%us_VcpNumber)
+         write(602,*) "us_PtrOfArcReflectivity     : ",  get_us_value(data_98d%us_PtrOfArcReflectivity)
+         write(602,*) "us_PtrOfArcVelocity         : ",  get_us_value(data_98d%us_PtrOfArcVelocity)
+         write(602,*) "us_PtrOfArcWidth)           : ",  get_us_value(data_98d%us_PtrOfArcWidth)
+         write(602,*) "us_Nyquist                  : ",  get_us_value(data_98d%us_Nyquist)
+         write(602,*) "us_AAF                      : ",  get_us_value(data_98d%us_AAF)
+         write(602,*) "us_CircleTotal              : ",  get_us_value(data_98d%us_CircleTotal)
+         write(602,*) "us_temp1                    : ",  trim(data_98d%us_temp1 ),',', (get_us_value(data_98d%us_temp1 (2*i-1:2*i)), i=1, 7)
+         write(602,*) "us_temp2                    : ",  trim(data_98d%us_temp2 ),',', (get_us_value(data_98d%us_temp2 (2*i-1:2*i)), i=1, 6)
+         write(602,*) "us_temp4                    : ",  trim(data_98d%us_temp4 ),',', (get_us_value(data_98d%us_temp4 (2*i-1:2*i)), i=1, 4)
+         write(602,*) "us_temp47                   : ",  trim(data_98d%us_temp47),',', (get_us_value(data_98d%us_temp47(2*i-1:2*i)), i=1, 1)
+         write(602,*) "us_temp48                   : ",  trim(data_98d%us_temp48),',', (get_us_value(data_98d%us_temp48(2*i-1:2*i)), i=1, 1)
+         write(602,*) "uc_temp5                    : ",  trim(data_98d%uc_temp5 ),',', (get_us_value(data_98d%uc_temp5 (2*i-1:2*i)), i=1, 15)
+         write(602,*) "uc_temp                     : ",  trim(data_98d%uc_temp  ),',', (get_us_value(data_98d%uc_temp  (2*i-1:2*i)), i=1, 2)
 
          VolBeg = .true.
          NewElv = .true.
@@ -2365,25 +2419,25 @@ contains
    end type
 
    !Table 2-6 Moments Mask
-   integer, parameter :: flag_moment_dbt =1
-   integer, parameter :: flag_moment_dbz =2
-   integer, parameter :: flag_moment_v   =3
-   integer, parameter :: flag_moment_w   =4
-   integer, parameter :: flag_moment_sqi =5
-   integer, parameter :: flag_moment_cpa =6
-   integer, parameter :: flag_moment_zdr =7
-   integer, parameter :: flag_moment_ldr =8
-   integer, parameter :: flag_moment_cc  =9
-   integer, parameter :: flag_moment_dp  =10
-   integer, parameter :: flag_moment_kdp =11
-   integer, parameter :: flag_moment_cp  =12
-   integer, parameter :: flag_moment_hcl =14
-   integer, parameter :: flag_moment_cf  =15
-   integer, parameter :: flag_moment_snr =16
-   integer, parameter :: flag_moment_zc  =32
-   integer, parameter :: flag_moment_vc  =33
-   integer, parameter :: flag_moment_wc  =34
-   integer, parameter :: flag_moment_zdrc=35
+   integer, parameter :: flag_moment_dbt = 1 ! Total Reflectivity (Before Filter)
+   integer, parameter :: flag_moment_dbz = 2 ! Reflectivity (After Filter)
+   integer, parameter :: flag_moment_v   = 3 ! Doppler Velocity
+   integer, parameter :: flag_moment_w   = 4 ! Spectrum Width
+   integer, parameter :: flag_moment_sqi = 5 ! Signal Quality Index
+   integer, parameter :: flag_moment_cpa = 6 ! Clutter Phase Alignment
+   integer, parameter :: flag_moment_zdr = 7 ! Differential Reflectivity
+   integer, parameter :: flag_moment_ldr = 8 ! Liner Differential Ratio
+   integer, parameter :: flag_moment_cc  = 9 ! Cross Correlation Coefficient
+   integer, parameter :: flag_moment_fdp =10 ! Differential Phase
+   integer, parameter :: flag_moment_kdp =11 ! Specific Differential Phase
+   integer, parameter :: flag_moment_cp  =12 ! Clutter Probability
+   integer, parameter :: flag_moment_hcl =14 ! Hydro Classification
+   integer, parameter :: flag_moment_cf  =15 ! Clutter Flag
+   integer, parameter :: flag_moment_snr =16 ! Signal Noise Ratio
+   integer, parameter :: flag_moment_zc  =32 ! Corrected Reflectivity
+   integer, parameter :: flag_moment_vc  =33 ! Corrected Doppler Velocity
+   integer, parameter :: flag_moment_wc  =34 ! Corrected Spectrum Width
+   integer, parameter :: flag_moment_zdrc=35 ! Corrected Differential Reflectivity
    
    type t_radial_header ! 64 Bytes
       character(len=4 ) :: i_radial_state     ! 0-elev start,1-medium,2-elev end,3-vol start,4-vol end,5-RHI start,6-RHI end
@@ -2411,7 +2465,7 @@ contains
    end type
 
    ! Var = ( Dat-offset)/Scale 
-   ! 0-less than Threshold, 1- RangeFold,2-NotScan,3-Unknown,4-Reserved
+   ! 0-less than Threshold, 1- RangeFold, 2-NotScan, 3-Unknown, 4-Reserved
    type t_moment_data !
       character(len=1), dimension(:), allocatable :: dat
    end type
@@ -2443,6 +2497,8 @@ contains
    character(len=1), dimension(:), allocatable :: str_file
    real, dimension(:), allocatable :: dat
    
+   logical, dimension(:), allocatable :: ifvel, ifref, ifzdr, ifcc, ifkdp, ifsnr
+
    inquire(file=filename,size=filesize)
    allocate(str_file(filesize))
    open(radar_unit,file=filename,recl=filesize,status="old",access="direct")
@@ -2452,14 +2508,16 @@ contains
    !generic type:9-12
    if(get_i_value(str_file(9:12))/=1)then
       write(*,*) "Not Radar Base Data"
-       return
+      return
    endif
+
    !scan type:325-328
    ival=get_i_value(str_file(325:328))
    if(ival/=1.and.ival/=0)then
       write(*,*) "Not Vol or PPI Scan"
        return
    endif
+
    !cut number:337-340
    n_cut=get_i_value(str_file(337:340))
    if(n_cut<0)then
@@ -2492,12 +2550,20 @@ contains
       i=i+1
    enddo
    n_radial=i-1
+
    ival=maxval(n_moment(1:n_radial))
-   write(*,*) "n_radial:", n_radial, ival
+   write(601,*) "n_radial, n_moment:", n_radial, ival
    allocate(cut_config(n_cut))
    allocate(radial_header(n_radial))
    allocate(moment_header(n_radial,ival))
    allocate(moment_data  (n_radial,ival))
+
+   allocate(ifref(n_cut))
+   allocate(ifvel(n_cut))
+   allocate(ifzdr(n_cut))
+   allocate(ifcc (n_cut))
+   allocate(ifkdp(n_cut))
+   allocate(ifsnr(n_cut))
 
    do i=1, n_radial
 !     write(*,*) "n_moment,length:",n_moment(i),n_radial_length(i)
@@ -2637,6 +2703,12 @@ contains
 !                    get_us_value(header_784%RadarObservationInfo%LayerParam( k)%us_MaxL    )
 ! 
 !   enddo
+   ifref=.false.
+   ifvel=.false.
+   ifzdr=.false.
+   ifcc =.false.
+   ifkdp=.false.
+   ifsnr=.false.
    MaxCuts = rdat%ntilt
    MaxRads = 0 
    allocate(n_rgate(n_cut))
@@ -2652,9 +2724,23 @@ contains
          ival=get_i_value(moment_header(i,j)%i_data_type)
          if(ival==flag_moment_dbz)then
             n_rgate(k)=max(n_rgate(k),get_i_value(moment_header(i,j)%i_length)/get_s_value(moment_header(i,j)%s_bin_length))
+            ifref(k)=.true.
          endif
          if(ival==flag_moment_v)then
             n_vgate(k)=max(n_vgate(k),get_i_value(moment_header(i,j)%i_length)/get_s_value(moment_header(i,j)%s_bin_length))
+            ifvel(k)=.true.
+         endif
+         if(ival==flag_moment_zdr)then
+            ifzdr(k)=.true.
+         endif
+         if(ival==flag_moment_cc)then
+            ifcc(k)=.true.
+         endif
+         if(ival==flag_moment_kdp)then
+            ifkdp(k)=.true.
+         endif
+         if(ival==flag_moment_snr)then
+            ifsnr(k)=.true.
          endif
       enddo
    enddo
@@ -2663,15 +2749,28 @@ contains
    VGates  = maxval(n_vgate) 
    WGates  = maxval(n_vgate) 
 
-   write(*,*) "RGates,VGates,WGates,MaxRads,MaxCuts:",RGates,VGates,WGates,MaxRads,MaxCuts
+   write(601,*) "RGates,VGates,WGates,MaxRads,MaxCuts:",RGates,VGates,WGates,MaxRads,MaxCuts
    call allocate_radar_data(rdat,RGates,VGates,WGates,MaxRads,MaxCuts)
+   rdat%ifref=ifref
+   rdat%ifvel=ifvel
+   rdat%ifzdr=ifzdr
+   rdat%ifcc =ifcc 
+   rdat%ifkdp=ifkdp
+   rdat%ifsnr=ifsnr
+ 
 !   
+   write(601,"(9A10)") "k","range1","range2","rgatesp","vgatesp","vmax","Sangle","Eangle","ang_res"
    do k=1, rdat%ntilt
       rdat%vmax   (k) = get_f_value(cut_config(k)%f_nyquist_speed) 
-      write(*,*) "k,range1,range2,start_angle,end_angle,ang_res:", k , get_i_value(cut_config(k)%i_maximum_range1), get_i_value(cut_config(k)%i_maximum_range2),&
-                                                               rdat%vmax(k),get_f_value(cut_config(k)%f_nyquist_speed),&
-                                                               get_f_value(cut_config(k)%f_start_angle), get_f_value(cut_config(k)%f_end_angle),&
-                                                               get_f_value(cut_config(k)%f_angular_resolution)
+      write(601,"(5I10,4F10.2)") k ,&
+                 get_i_value(cut_config(k)%i_maximum_range1),&
+                 get_i_value(cut_config(k)%i_maximum_range2),&
+                 get_i_value(cut_config(k)%i_log_resolution), &
+                 get_i_value(cut_config(k)%i_doppler_resolution), &
+                 get_f_value(cut_config(k)%f_nyquist_speed),&
+                 get_f_value(cut_config(k)%f_start_angle),& 
+                 get_f_value(cut_config(k)%f_end_angle),&
+                 get_f_value(cut_config(k)%f_angular_resolution)
       rdat%rmax   (k) = min(get_i_value(cut_config(k)%i_maximum_range1),get_i_value(cut_config(k)%i_maximum_range2)) 
       rdat%rgatesp(k) = get_i_value(cut_config(k)%i_log_resolution)
       rdat%vgatesp(k) = get_i_value(cut_config(k)%i_doppler_resolution)
@@ -2707,22 +2806,46 @@ contains
 !
    n=max(Rgates, Vgates)
    allocate(dat(n))
-   rdat%ifref=.false.
-   rdat%ifvel=.false.
    
-   write(*,*) "n_radial:",n_radial
+   write(601,*) "n_radial:",n_radial
+   write(601,"(5A8,2A10,A12,A8)") "m","state","spot","j","k","elev","azim","sec","ms" 
+   write(603,"(3A5,8A10)") "I","J","K","Ref","Vel","Spw","Zdr","CC","Fdp","Kdp","SNR"
    do m=1, n_radial 
       j=get_i_value(radial_header(m)%i_radial_number)
       k=get_i_value(radial_header(m)%i_elevation_number)
-      !write(601,"(5I8,2F10.2,I12,I5)") m,  get_i_value(radial_header(m)%i_radial_state),get_i_value(radial_header(m)%i_spot_blank),&
-      !                    j,k,get_f_value(radial_header(m)%f_elevation   ),get_f_value(radial_header(m)%f_azimuth   ),&
-      !                    get_i_value(radial_header(m)%i_seconds),get_i_value(radial_header(m)%i_microseconds)
+      write(601,"(5I8,2F10.2,I12,I8)") m,get_i_value(radial_header(m)%i_radial_state),&
+                                         get_i_value(radial_header(m)%i_spot_blank  ),&
+                                     j,k,get_f_value(radial_header(m)%f_elevation   ),&
+                                         get_f_value(radial_header(m)%f_azimuth     ),&
+                                         get_i_value(radial_header(m)%i_seconds     ),&
+                                         get_i_value(radial_header(m)%i_microseconds)
       do n=1, n_moment(m) 
             nbyte      = get_s_value(moment_header(m,n)%s_bin_length)
             len_record = get_i_value(moment_header(m,n)%i_length)/nbyte
             ioffset    = get_i_value(moment_header(m,n)%i_offset)
             iscale     = get_i_value(moment_header(m,n)%i_scale)
             ival       = get_i_value(moment_header(m,n)%i_data_type)
+            write(602,*) "i_data_type:", m, n, ival,&
+                                          "dbt = 1,"//&
+                                          "dbz = 2,"//&
+                                          "v   = 3,"//&
+                                          "w   = 4,"//&
+                                          "sqi = 5,"//&
+                                          "cpa = 6,"//&
+                                          "zdr = 7,"//&
+                                          "ldr = 8,"//&
+                                          "cc  = 9,"//&
+                                          "dp  =10,"//&
+                                          "kdp =11,"//&
+                                          "cp  =12,"//&
+                                          "hcl =14,"//&
+                                          "cf  =15,"//&
+                                          "snr =16,"//&
+                                          "zc  =32,"//&
+                                          "vc  =33,"//&
+                                          "wc  =34,"//&
+                                          "zdrc=35,"
+
             do i=1, len_record
                if(nbyte==1)then
                    dat(i)= get_rstm_value_1(moment_data(m,n)%dat(i*nbyte  :i*nbyte),iscale,ioffset)
@@ -2734,18 +2857,43 @@ contains
             enddo
          if(ival==flag_moment_dbz)then
             rdat%ref(1:len_record,j,k)=dat(1:len_record)
-            rdat%ifref(k)=.true.
          endif
          if(ival==flag_moment_v)then
             rdat%vel(1:len_record,j,k)=dat(1:len_record)
-            rdat%ifvel(k)=.true.
             rdat%vres(j,k)=1./iscale
          endif
          if(ival==flag_moment_w)then
             rdat%spw(1:len_record,j,k)=dat(1:len_record)
          endif
+         if(ival==flag_moment_zdr)then
+            rdat%zdr(1:len_record,j,k)=dat(1:len_record)
+         endif
+         if(ival==flag_moment_cc)then
+            rdat%cc(1:len_record,j,k)=dat(1:len_record)
+         endif
+         if(ival==flag_moment_fdp)then
+            rdat%fdp(1:len_record,j,k)=dat(1:len_record)
+         endif
+         if(ival==flag_moment_kdp)then
+            rdat%kdp(1:len_record,j,k)=dat(1:len_record)
+         endif
+         if(ival==flag_moment_snr)then
+            rdat%snr(1:len_record,j,k)=dat(1:len_record)
+         endif
          rdat%stime(j,k)=get_i_value(radial_header(m)%i_seconds)
          rdat%etime(j,k)=get_i_value(radial_header(m)%i_seconds)
+         !do i=1, len_record
+         !   if(rdat%ref(i,j,k)/=value_invalid.or. &
+         !      rdat%vel(i,j,k)/=value_invalid.or. & 
+         !      rdat%spw(i,j,k)/=value_invalid.or. & 
+         !      rdat%zdr(i,j,k)/=value_invalid.or. &
+         !      rdat%cc (i,j,k)/=value_invalid.or. & 
+         !      rdat%fdp(i,j,k)/=value_invalid.or. & 
+         !      rdat%kdp(i,j,k)/=value_invalid.or. & 
+         !      rdat%snr(i,j,k)/=value_invalid)then
+         !      write(603,"(3I5,8F10.2)") i, j, k, rdat%ref(i,j,k), rdat%vel(i,j,k), rdat%spw(i,j,k), rdat%zdr(i,j,k), rdat%cc(i,j,k), rdat%fdp(i,j,k), rdat%kdp(i,j,k), rdat%snr(i,j,k)
+         !   endif
+         !enddo
       enddo
    enddo
 
@@ -2791,4 +2939,248 @@ contains
      end function
    end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+   subroutine write_radar_grads_station(filename, radar_data)
+   implicit none
+   character(len=*),   intent(in) :: filename
+   type(t_radar_data), intent(inout) :: radar_data
+
+   character(len=800) :: fileout, ctlfile, datfile, mapfile
+
+   integer :: i, j, k, n
+   real    :: lat1, lon1, alt, lat0, lon0, alt0, range, height, elev, sfcrng,azim
+
+   integer           :: NFLAG, NLEV
+   character(len=8)  :: STID
+   real              :: TIM, VEL, SPW
+
+   character(len=80) :: endian
+
+   if(is_big_endian)then
+      endian="big_endian"
+   else
+      endian="little_endian"
+   endif
+
+   call calculate_radar_loc(radar_data)
+   lat0=radar_data%latitude
+   lon0=radar_data%longitude
+   alt0=radar_data%altitude
+
+   n=0
+   do k=1, radar_data%ntilt
+      if(radar_data%ifvel(k))then
+         n=n+1
+         !if(n>2) exit
+         write(ctlfile,"(A,I2.2,A)") trim(filename)//".vel.",n,".ctl"
+         write(datfile,"(A,I2.2,A)") trim(filename)//".vel.",n,".dat"
+         write(mapfile,"(A,I2.2,A)") trim(filename)//".vel.",n,".map"
+         open(radar_unit,file=ctlfile,status="unknown")
+         write(radar_unit,"(A)") "DSET ^"//trim(datfile)
+         write(radar_unit,"(A)") "DTYPE  station"
+         write(radar_unit,"(A)") "OPTIONS sequential "//trim(endian)
+         write(radar_unit,"(A)") "STNMAP "//trim(mapfile)
+         write(radar_unit,"(A,F8.1)") "UNDEF  ",value_invalid
+         write(radar_unit,"(A)") "TITLE  Station Data Sample"
+         write(radar_unit,"(A,I2.2,':',I2.2,'z',I2.2,A3,I4.4,A)") &
+              "TDEF   1 linear ",radar_data%hour,radar_data%minute,&
+              radar_data%day,month_name(radar_data%month),radar_data%year," 5mn"
+         write(radar_unit,"(A)") "VARS 2"
+         write(radar_unit,"(A)") "v    0  99  Radical Velocity "
+         write(radar_unit,"(A)") "w    0  99  Spectrum Width "
+         write(radar_unit,"(A)") "ENDVARS"
+
+         open(radar_unit,file=datfile,form='unformatted',status="unknown")
+         write(*,"(2A)") "Writing vel grads station file:", trim(datfile)
+         TIM = 0.0
+         NLEV = 1
+         NFLAG = 1
+         do j=1,radar_data%nazim(k)
+            !elev=radar_data%rtilt(j,k)
+            !azim=radar_data%razim(j,k)
+            do i=1,radar_data%nvgate(j,k)
+               if(radar_data%vel(i,j,k)/=value_invalid)then
+!.and.radar_data%spw(i,j,k)/=value_invalid
+                  !range=i*radar_data%vgatesp(k)
+                  !call beamhgt(elev,range,height,sfcrng)
+                  !call gcircle(lat0,lon0,azim,sfcrng,lat1,lon1)
+                  lat1=radar_data%vlat(i,j,k)
+                  lon1=radar_data%vlon(i,j,k)
+                  write(STID,'(I4,I4)') i,j
+                  write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
+                  if(ABS(radar_data%vel(i,j,k))<200.)then
+                     vel=radar_data%vel(i,j,k)
+                  else
+                     vel=value_invalid
+                  endif
+                  spw=radar_data%spw(i,j,k)
+                  write(radar_unit) VEL, SPW
+               endif
+            enddo
+         enddo
+         NLEV = 0
+         WRITE(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
+         close(radar_unit)
+      endif
+   enddo
+
+   n=0
+   do k=1, radar_data%ntilt
+      if(radar_data%ifref(k))then
+         n=n+1
+         !if(n>1) exit
+         write(ctlfile,"(A,I2.2,A)") trim(filename)//".ref.",n,".ctl"
+         write(datfile,"(A,I2.2,A)") trim(filename)//".ref.",n,".dat"
+         write(mapfile,"(A,I2.2,A)") trim(filename)//".ref.",n,".map"
+         open(radar_unit,file=ctlfile,status="unknown")
+         write(radar_unit,"(A)") "DSET ^"//trim(datfile)
+         write(radar_unit,"(A)") "DTYPE  station"
+         write(radar_unit,"(A)") "OPTIONS sequential "//trim(endian)
+         write(radar_unit,"(A)") "STNMAP "//trim(mapfile)
+         write(radar_unit,"(A,F8.1)") "UNDEF  ",value_invalid
+         write(radar_unit,"(A)") "TITLE  Station Data Sample"
+         write(radar_unit,"(A,I2.2,':',I2.2,'z',I2.2,A3,I4.4,A)") &
+              "TDEF   1 linear ",radar_data%hour,radar_data%minute,&
+              radar_data%day,month_name(radar_data%month),radar_data%year," 5mn"
+         write(radar_unit,"(A)") "VARS 1"
+         write(radar_unit,"(A)") "z    0  99  Reflectivity"
+         write(radar_unit,"(A)") "ENDVARS"
+
+         open(radar_unit,file=datfile,form='unformatted',status="unknown")
+         write(*,"(2A)") "Writing ref grads station file:", trim(datfile)
+         TIM = 0.0
+         NLEV = 1
+         NFLAG = 1
+         do j=1,radar_data%nazim(k)
+            !elev=radar_data%rtilt(j,k)
+            !azim=radar_data%razim(j,k)
+            do i=1,radar_data%nrgate(j,k)
+               if(radar_data%ref(i,j,k)/=value_invalid)then
+                  !range=i*radar_data%rgatesp(k)
+                  !call beamhgt(elev,range,height,sfcrng)
+                  !call gcircle(lat0,lon0,azim,sfcrng,lat1,lon1)
+                  lat1=radar_data%rlat(i,j,k)
+                  lon1=radar_data%rlon(i,j,k)
+                  write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
+                  write(radar_unit) radar_data%ref(i,j,k)
+               endif
+            enddo
+         enddo
+         NLEV = 0
+         WRITE(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
+         close(radar_unit)
+      endif
+
+   enddo
+
+   n=0
+   do k=1, radar_data%ntilt
+      if(radar_data%ifzdr(k))then
+         n=n+1
+         !if(n>1) exit
+         write(ctlfile,"(A,I2.2,A)") trim(filename)//".zdr.",n,".ctl"
+         write(datfile,"(A,I2.2,A)") trim(filename)//".zdr.",n,".dat"
+         write(mapfile,"(A,I2.2,A)") trim(filename)//".zdr.",n,".map"
+         open(radar_unit,file=ctlfile,status="unknown")
+         write(radar_unit,"(A)") "DSET ^"//trim(datfile)
+         write(radar_unit,"(A)") "DTYPE  station"
+         write(radar_unit,"(A)") "OPTIONS sequential "//trim(endian)
+         write(radar_unit,"(A)") "STNMAP "//trim(mapfile)
+         write(radar_unit,"(A,F8.1)") "UNDEF  ",value_invalid
+         write(radar_unit,"(A)") "TITLE  Station Data Sample"
+         write(radar_unit,"(A,I2.2,':',I2.2,'z',I2.2,A3,I4.4,A)") &
+              "TDEF   1 linear ",radar_data%hour,radar_data%minute,&
+              radar_data%day,month_name(radar_data%month),radar_data%year," 5mn"
+         write(radar_unit,"(A)") "VARS 5"
+         write(radar_unit,"(A)") "zdr    0  99  Diferential Reflectivity"
+         write(radar_unit,"(A)") "cc     0  99  Cross Correlation Coefficient"
+         write(radar_unit,"(A)") "fdp    0  99  Differential Phase"
+         write(radar_unit,"(A)") "kdp    0  99  Specific Differential Phase"
+         write(radar_unit,"(A)") "snr    0  99  Signal Noise Ratio"
+         write(radar_unit,"(A)") "ENDVARS"
+
+         open(radar_unit,file=datfile,form='unformatted',status="unknown")
+         write(*,"(2A)") "Writing zdr grads station file:", trim(datfile)
+         TIM = 0.0
+         NLEV = 1
+         NFLAG = 1
+         do j=1,radar_data%nazim(k)
+            !elev=radar_data%rtilt(j,k)
+            !azim=radar_data%razim(j,k)
+            do i=1,radar_data%nrgate(j,k)
+               if(radar_data%zdr(i,j,k)/=value_invalid)then
+                  lat1=radar_data%rlat(i,j,k)
+                  lon1=radar_data%rlon(i,j,k)
+                  write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
+                  write(radar_unit)radar_data%zdr(i,j,k), radar_data%cc(i,j,k), radar_data%fdp(i,j,k), radar_data%kdp(i,j,k), radar_data%snr(i,j,k)
+               endif
+            enddo
+         enddo
+         NLEV = 0
+         WRITE(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
+         close(radar_unit)
+      endif
+
+   enddo
+
+   end subroutine
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   subroutine calculate_radar_loc(radar_data)
+   use libradar
+   implicit none
+   type(t_radar_data), intent(inout) :: radar_data
+
+   integer :: i, j, k, n
+   real    :: lat1, lon1, alt, lat0, lon0, alt0, range, height, elev, sfcrng,azim
+
+
+
+   if(radar_data%if_have_loc)then
+      return
+   endif
+
+   lat0=radar_data%latitude
+   lon0=radar_data%longitude
+   alt0=radar_data%altitude
+
+   do k=1, radar_data%ntilt
+      if(radar_data%ifvel(k))then
+         do j=1,radar_data%nazim(k)
+            elev=radar_data%rtilt(j,k)
+            azim=radar_data%razim(j,k)
+            do i=1,radar_data%nvgate(j,k)
+               if(radar_data%vel(i,j,k)/=value_invalid)then
+                  range=i*radar_data%vgatesp(k)
+                  call beamhgt(elev,range,height,sfcrng)
+                  call gcircle(lat0,lon0,azim,sfcrng,lat1,lon1)
+                  radar_data%vlon(i,j,k)=lon1
+                  radar_data%vlat(i,j,k)=lat1
+                  radar_data%valt(i,j,k)=height+alt0
+               endif
+            enddo
+         enddo
+      endif
+   enddo
+
+   do k=1, radar_data%ntilt
+      if(radar_data%ifref(k))then
+         do j=1,radar_data%nazim(k)
+            elev=radar_data%rtilt(j,k)
+            azim=radar_data%razim(j,k)
+            do i=1,radar_data%nrgate(j,k)
+               if(radar_data%ref(i,j,k)/=value_invalid)then
+                  range=i*radar_data%rgatesp(k)
+                  call beamhgt(elev,range,height,sfcrng)
+                  call gcircle(lat0,lon0,azim,sfcrng,lat1,lon1)
+                  radar_data%rlon(i,j,k)=lon1
+                  radar_data%rlat(i,j,k)=lat1
+                  radar_data%ralt(i,j,k)=height+alt0
+               endif
+            enddo
+         enddo
+      endif
+   enddo
+
+   end subroutine
+
 end module

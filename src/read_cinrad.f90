@@ -28,7 +28,7 @@ call get_radar_filename_info(filename, radar_id, radar_time, radar_type)
 n =search_radar_site(radar_id)
 if(n<0)then
    write(*,*) "ID:",radar_id,"Not found!"
-   stop
+!  stop
 endif
 
 rdat%latitude =radar_info(n)%lat
@@ -45,5 +45,8 @@ if(radar_type/= radar_info(n)%type)then
    write(*,*) "Error radar_type in radar_info.txt file:", trim(radar_info(n)%type),"!!!"
 endif
 call read_radar_data(filename,radar_type,rdat)
+
+call write_radar_grads_station("raw."//trim(radar_id)//"."//trim(radar_time),rdat)
+
 
 end program

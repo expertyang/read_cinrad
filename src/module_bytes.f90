@@ -1,6 +1,7 @@
 module bytes
 ! Input Code is Little Endian
-   logical, private :: is_big_endian, if_checked=.false.
+   logical          :: is_big_endian
+   logical, private :: if_checked=.false.
 
       INTERFACE get_i_value
          MODULE PROCEDURE get_i_value_1 , get_i_value_4 
