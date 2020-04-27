@@ -8,8 +8,8 @@ then
    exit 0
 fi
 
-ctlfile=$1
-
+for ctlfile in $@
+do
 var=`basename $ctlfile|cut -d"." -f4`
 lev=`basename $ctlfile|cut -d"." -f5`
 tim=`basename $ctlfile|cut -d"." -f3`
@@ -163,3 +163,4 @@ cat >> plot_radar.gs<<EOF
 'quit'
 EOF
 grads -lbc "plot_radar.gs"
+done
