@@ -2941,14 +2941,16 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
    subroutine write_radar_grads_station(filename, radar_data)
+   use libradar
    implicit none
    character(len=*),   intent(in) :: filename
    type(t_radar_data), intent(inout) :: radar_data
 
    character(len=800) :: fileout, ctlfile, datfile, mapfile
 
-   integer :: i, j, k, n
-   real    :: lat1, lon1, alt, lat0, lon0, alt0, range, height, elev, sfcrng,azim
+   integer :: i, j, k, n, iazim, i1
+   real    :: lat1, lon1, alt, lat0, lon0, alt0, range, height, elev, sfcrng,azim, dazim
+   real    :: lat2, lon2, lat3, lon3
 
    integer           :: NFLAG, NLEV
    character(len=8)  :: STID
@@ -2996,13 +2998,13 @@ contains
          NLEV = 1
          NFLAG = 1
          do j=1,radar_data%nazim(k)
-            !elev=radar_data%rtilt(j,k)
-            !azim=radar_data%razim(j,k)
+            elev=radar_data%rtilt(j,k)
+            azim=radar_data%razim(j,k)
             do i=1,radar_data%nvgate(j,k)
                if(radar_data%vel(i,j,k)/=value_invalid)then
 !.and.radar_data%spw(i,j,k)/=value_invalid
-                  !range=i*radar_data%vgatesp(k)
-                  !call beamhgt(elev,range,height,sfcrng)
+                  range=i*radar_data%vgatesp(k)
+                  call beamhgt(elev,range,height,sfcrng)
                   !call gcircle(lat0,lon0,azim,sfcrng,lat1,lon1)
                   lat1=radar_data%vlat(i,j,k)
                   lon1=radar_data%vlon(i,j,k)
@@ -3015,6 +3017,19 @@ contains
                   endif
                   spw=radar_data%spw(i,j,k)
                   write(radar_unit) VEL, SPW
+                  if(sfcrng*RADIAN>radar_data%vgatesp(k))then
+                    iazim=ceiling(sfcrng*RADIAN/radar_data%vgatesp(k)/2)
+                     do i1=iazim,0,-1
+                        dazim=azim+(i1+0.5)*radar_data%vgatesp(k)/(sfcrng*RADIAN)
+                        call gcircle(lat0,lon0,dazim,sfcrng,lat1,lon1)
+                        write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
+                        write(radar_unit) VEL, SPW
+                        dazim=azim-(i1+0.5)*radar_data%vgatesp(k)/(sfcrng*RADIAN)
+                        call gcircle(lat0,lon0,dazim,sfcrng,lat1,lon1)
+                        write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
+                        write(radar_unit) VEL, SPW
+                     enddo
+                  endif
                endif
             enddo
          enddo
@@ -3052,17 +3067,32 @@ contains
          NLEV = 1
          NFLAG = 1
          do j=1,radar_data%nazim(k)
-            !elev=radar_data%rtilt(j,k)
-            !azim=radar_data%razim(j,k)
+            elev=radar_data%rtilt(j,k)
+            azim=radar_data%razim(j,k)
             do i=1,radar_data%nrgate(j,k)
                if(radar_data%ref(i,j,k)/=value_invalid)then
-                  !range=i*radar_data%rgatesp(k)
-                  !call beamhgt(elev,range,height,sfcrng)
+                  range=i*radar_data%rgatesp(k)
+                  call beamhgt(elev,range,height,sfcrng)
                   !call gcircle(lat0,lon0,azim,sfcrng,lat1,lon1)
                   lat1=radar_data%rlat(i,j,k)
                   lon1=radar_data%rlon(i,j,k)
                   write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
                   write(radar_unit) radar_data%ref(i,j,k)
+                  if(sfcrng*RADIAN>radar_data%rgatesp(k))then
+                    iazim=ceiling(sfcrng*RADIAN/radar_data%rgatesp(k)/2)
+                     do i1=iazim,0,-1
+                        dazim=azim+(i1+0.5)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
+                        call gcircle(lat0,lon0,dazim,sfcrng,lat2,lon2)
+                        write(radar_unit) STID,lat2,lon2,TIM,NLEV,NFLAG
+                        write(radar_unit) radar_data%ref(i,j,k)
+                        dazim=azim-(i1+0.5)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
+                        call gcircle(lat0,lon0,dazim,sfcrng,lat3,lon3)
+                        write(radar_unit) STID,lat3,lon3,TIM,NLEV,NFLAG
+                        write(radar_unit) radar_data%ref(i,j,k)
+!write(67,*) i,j,k,i1,iazim,lat1, lat2, lat3, lon1, lon2, lon3, radar_data%ref(i,j,k)
+                     enddo
+                  endif
+
                endif
             enddo
          enddo
@@ -3105,14 +3135,29 @@ contains
          NLEV = 1
          NFLAG = 1
          do j=1,radar_data%nazim(k)
-            !elev=radar_data%rtilt(j,k)
-            !azim=radar_data%razim(j,k)
+            elev=radar_data%rtilt(j,k)
+            azim=radar_data%razim(j,k)
             do i=1,radar_data%nrgate(j,k)
                if(radar_data%zdr(i,j,k)/=value_invalid)then
+                  range=i*radar_data%rgatesp(k)
+                  call beamhgt(elev,range,height,sfcrng)
                   lat1=radar_data%rlat(i,j,k)
                   lon1=radar_data%rlon(i,j,k)
                   write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
                   write(radar_unit)radar_data%zdr(i,j,k), radar_data%cc(i,j,k), radar_data%fdp(i,j,k), radar_data%kdp(i,j,k), radar_data%snr(i,j,k)
+                  if(sfcrng*RADIAN>radar_data%rgatesp(k))then
+                    iazim=ceiling(sfcrng*RADIAN/radar_data%rgatesp(k)/2)
+                     do i1=iazim,0,-1
+                        dazim=azim+(i1+0.5)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
+                        call gcircle(lat0,lon0,dazim,sfcrng,lat1,lon1)
+                        write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
+                        write(radar_unit)radar_data%zdr(i,j,k), radar_data%cc(i,j,k), radar_data%fdp(i,j,k), radar_data%kdp(i,j,k), radar_data%snr(i,j,k)
+                        dazim=azim-(i1+0.5)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
+                        call gcircle(lat0,lon0,dazim,sfcrng,lat1,lon1)
+                        write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
+                        write(radar_unit)radar_data%zdr(i,j,k), radar_data%cc(i,j,k), radar_data%fdp(i,j,k), radar_data%kdp(i,j,k), radar_data%snr(i,j,k)
+                     enddo
+                  endif
                endif
             enddo
          enddo

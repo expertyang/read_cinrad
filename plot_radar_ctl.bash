@@ -8,6 +8,8 @@ then
    exit 0
 fi
 
+rdigsiz=0.01
+vdigsiz=0.003
 for ctlfile in $@
 do
 var=`basename $ctlfile|cut -d"." -f4`
@@ -61,7 +63,7 @@ cat>>plot_radar.gs<<EOF
 'set cint 2'
 'set clevs    0 5  10 15 20 25 30 35 40 45 50 55 60 65 70 75'
 'set ccols 0 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86'
-'set digsiz 0.01'
+'set digsiz $rdigsiz'
 'set cmark 3'
 
 'd z'
@@ -89,7 +91,7 @@ cat >> plot_radar.gs<<EOF
 'set cint 2'
 'set clevs  -60 -50 -40 -30 -20 -10  0  10  20 30 40 50 60'
 'set ccols 51  52  53  54  55 56 57 58 59 60 61 62 63 64 '
-'set digsiz 0.05'
+'set digsiz $vdigsiz'
 'set cmark 3'
 
 'd v'
@@ -101,7 +103,7 @@ cat >> plot_radar.gs<<EOF
 'set cint 2'
 'set clevs  0 0.5 1  2  3  4  8 12 16 20 24'
 'set ccols 0 57 56 55 54 58 59 60 61 62 63 64 '
-'set digsiz 0.05'
+'set digsiz $vdigsiz'
 'set cmark 3'
 
 'd w'
@@ -112,7 +114,7 @@ EOF
 elif [ $var == "zdr" ]
 then
 cat >> plot_radar.gs<<EOF
-'set digsiz 0.05'
+'set digsiz $rdigsiz'
 'set cmark 3'
 * 'set cint 0.1'
 'set clevs -5 -4 -3 -2 -1 0 1 2 3 4 5'
@@ -123,7 +125,7 @@ cat >> plot_radar.gs<<EOF
 
 'c'
 'set cint 0.1'
-'set digsiz 0.05'
+'set digsiz $rdigsiz'
 'set cmark 3'
 'd cc'
 'colmap.gs'
@@ -132,7 +134,7 @@ cat >> plot_radar.gs<<EOF
 
 'c'
 'set cint 30'
-'set digsiz 0.05'
+'set digsiz $rdigsiz'
 'set cmark 3'
 'd fdp'
 'colmap.gs'
@@ -141,7 +143,7 @@ cat >> plot_radar.gs<<EOF
 
 'c'
 'set cint 0.5'
-'set digsiz 0.05'
+'set digsiz $rdigsiz'
 'set cmark 3'
 'd kdp'
 'colmap.gs'
@@ -150,7 +152,7 @@ cat >> plot_radar.gs<<EOF
 'c'
 
 'set cint 10'
-'set digsiz 0.05'
+'set digsiz $rdigsiz'
 'set cmark 3'
 'd snr'
 'colmap.gs'
