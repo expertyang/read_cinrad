@@ -272,6 +272,49 @@ contains
    trilinear=(p2-p1)*z+p1
    end function
 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   SUBROUTINE INTERP2D ( NX, NY, FIELD, NUM, XI, YJ, DATA_OUT, MISS )
+   IMPLICIT NONE
+!      
+      INTEGER,                   INTENT(IN)  :: NUM, NX, NY
+      REAL, DIMENSION( NX , NY ),INTENT(IN)  :: FIELD
+      REAL,                      INTENT(IN)  :: MISS
+      REAL, DIMENSION( NUM ),    INTENT(IN)  :: XI , YJ
+      REAL, DIMENSION( NUM ),    INTENT(OUT) :: DATA_OUT
+!
+      REAL                                   :: X , Y
+      INTEGER                                :: K , IS , JS , IE , JE
+
+
+      !WRITE(*,*) FIELD
+      DATA_OUT = MISS
+      DO K =1, NUM
+         IF( XI ( K ) > NX .OR. XI ( K ) <1 .OR. &
+             YJ ( K ) > NY .OR. YJ ( K ) <1 )THEN
+             CYCLE
+         ENDIF
+         IS =INT( XI ( K ) )
+!        WRITE(*,*) XI(K), IS
+         IF( IS >= NX ) IS = NX -1
+         IF( IS < 1) IS =1
+         X = XI ( K )-FLOAT( IS )
+!        WRITE(*,*) XI(K), IS
+         IE = IS +1
+
+         JS =INT( YJ ( K ))
+         IF( JS >= NY ) JS = NY -1
+         IF( JS < 1) JS =1
+         Y = YJ ( K )-FLOAT( JS )
+         JE = JS +1
+
+         DATA_OUT ( K )= (1.0- X )*(1.0- Y )* FIELD ( IS , JS )+ &
+                         (1.0- X )*      Y  * FIELD ( IS , JE )+ &
+                               X  *(1.0- Y) * FIELD ( IE , JS )+ &
+                               X  *      Y  * FIELD ( IE , JE )
+      ENDDO
+
+   END SUBROUTINE
+
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine uv2vr( range, elev , azimu , ugrid , vgrid , vr)
  !
@@ -347,5 +390,60 @@ contains
 !  write(*,*) lat1,lon1,head,dist,lat2,lon2
 !
 
+!
+recursive subroutine quick_sort(a,d,n,s,e) ! little - big
+implicit none
+  integer :: n    !
+  real    :: a(n) !
+  integer :: d(n) !
+  integer :: s    !
+  integer :: e    !
+  integer :: l,r  !
+
+  real    :: k    ! 
+  real    :: temp ! 
+  !
+  l=s 
+  r=e+1
+  ! right > left
+  if ( r<=l ) return
+  k=a(s)  !
+  do while(.true.)
+    ! a(l)<k
+    do while( .true. )
+      l=l+1
+      if ( (l>=e) ) exit
+      if ( (a(l) > k) ) exit
+    end do
+    ! a(r)>k
+    do while( .true. )
+      r=r-1
+      if ( (r<=s) ) exit
+      if ( (a(r) < k) ) exit
+    end do
+    ! right left
+    if ( r <= l ) exit
+    ! a(l),a(r)
+    temp=a(l)
+    a(l)=a(r)
+    a(r)=temp
+    temp=d(l)
+    d(l)=d(r)
+    d(r)=temp
+  end do
+  ! a(s),a(r)
+  temp=a(s)
+  a(s)=a(r)
+  a(r)=temp
+  temp=d(s)
+  d(s)=d(r)
+  d(r)=temp
+  ! r
+  call quick_sort(a,d,n,s,r-1)
+  ! r
+  call quick_sort(a,d,n,r+1,e)
+  return
+end subroutine quick_sort
+ 
 end module
 

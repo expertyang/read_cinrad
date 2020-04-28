@@ -1,0 +1,15 @@
+&file
+wrf_file  ="wrfinput_d01"
+radar_file="dat/Z_RADR_I_Z9417_20180806180100_O_DOR_SA_CAP.bin",
+info_file ="radar_info.txt"
+/
+
+&param
+if_use_wrf           = .F.
+if_radar_qc          = .T.
+if_output_qc         = .T.
+if_output_raw        = .T.
+if_output_model      = .T.
+if_output_obs        = .T.
+if_terminal_velocity = .T.
+/

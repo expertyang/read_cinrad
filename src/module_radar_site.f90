@@ -1,5 +1,4 @@
 module radar_site
-use string
 implicit none
 
 type t_radar_site
@@ -15,6 +14,7 @@ integer, parameter :: radar_unit = 901
 contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     subroutine read_radar_site(filename)
+    use string, only: count_line
     implicit none
     character(len=*), intent(in) :: filename
     integer :: i

@@ -1,7 +1,6 @@
 MODULE string
 IMPLICIT NONE
 
-character(len=3), dimension(12), parameter :: month_name=(/"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"/)
 character(len=1), parameter :: endl=char(0)
 
 CONTAINS

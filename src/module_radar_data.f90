@@ -1,8 +1,5 @@
 module radar_data
-use bytes
-!use libradar
-use date_pack
-use string
+use date_pack, only: date
 implicit none
 
    integer, parameter :: radar_unit = 901
@@ -599,8 +596,6 @@ contains
       endif
    enddo
 
-
-
    end subroutine
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -699,7 +694,8 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
    subroutine read_radar_38(filename,radar_type,rdat)
-
+   use bytes, only: get_uc_value, get_i_value, get_us_value, get_s_value
+   use date_pack, only: init_date, get_new_date, get_diff_date, one_hour
    implicit none
 
    character(len=*),   intent(in)    :: filename, radar_type
@@ -1024,6 +1020,8 @@ contains
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine read_radar_784(filename,radar_type,rdat)
+   use bytes, only: get_uc_value, get_i_value, get_us_value, get_s_value
+   use date_pack, only: init_date, get_diff_date
    implicit none
 
    character(len=*),   intent(in)    :: filename, radar_type
@@ -1366,7 +1364,9 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine read_radar_98d(filename,radar_type,rdat)
-
+   use bytes, only: get_s_value, get_f_value, &
+                    get_uc_value, get_us_value, get_ui_value
+   use date_pack, only: init_date, get_new_date, one_day, one_hour
    implicit none
 
    character(len=*),   intent(in)    :: filename
@@ -1955,6 +1955,9 @@ contains
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine read_radar_rd(filename,radar_type,rdat)
+   use bytes, only: get_i_value, get_c_value, get_s_value, &
+                    get_us_value, get_uc_value
+   use date_pack, only: init_date, get_new_date, get_diff_date, one_hour
    implicit none
 
    character(len=*),   intent(in)    :: filename, radar_type
@@ -2320,7 +2323,9 @@ contains
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine read_radar_rstm(filename,radar_type,rdat)
-
+   use bytes, only: get_i_value, get_s_value, get_f_value, &
+                    get_us_value, get_uc_value
+   use date_pack, only: get_new_date
    implicit none
 
    character(len=*),   intent(in)    :: filename, radar_type
@@ -2941,7 +2946,9 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
    subroutine write_radar_grads_station(filename, radar_data)
-   use libradar
+   use bytes, only: is_big_endian
+   use date_pack, only: month_name
+   use libradar, only: beamhgt, gcircle
    implicit none
    character(len=*),   intent(in) :: filename
    type(t_radar_data), intent(inout) :: radar_data
@@ -3020,11 +3027,11 @@ contains
                   if(sfcrng*RADIAN>radar_data%vgatesp(k))then
                     iazim=ceiling(sfcrng*RADIAN/radar_data%vgatesp(k)/2)
                      do i1=iazim,0,-1
-                        dazim=azim+(i1+0.5)*radar_data%vgatesp(k)/(sfcrng*RADIAN)
+                        dazim=azim+(i1+0.0)*radar_data%vgatesp(k)/(sfcrng*RADIAN)
                         call gcircle(lat0,lon0,dazim,sfcrng,lat1,lon1)
                         write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
                         write(radar_unit) VEL, SPW
-                        dazim=azim-(i1+0.5)*radar_data%vgatesp(k)/(sfcrng*RADIAN)
+                        dazim=azim-(i1+0.0)*radar_data%vgatesp(k)/(sfcrng*RADIAN)
                         call gcircle(lat0,lon0,dazim,sfcrng,lat1,lon1)
                         write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
                         write(radar_unit) VEL, SPW
@@ -3081,11 +3088,11 @@ contains
                   if(sfcrng*RADIAN>radar_data%rgatesp(k))then
                     iazim=ceiling(sfcrng*RADIAN/radar_data%rgatesp(k)/2)
                      do i1=iazim,0,-1
-                        dazim=azim+(i1+0.5)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
+                        dazim=azim+(i1+0.0)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
                         call gcircle(lat0,lon0,dazim,sfcrng,lat2,lon2)
                         write(radar_unit) STID,lat2,lon2,TIM,NLEV,NFLAG
                         write(radar_unit) radar_data%ref(i,j,k)
-                        dazim=azim-(i1+0.5)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
+                        dazim=azim-(i1+0.0)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
                         call gcircle(lat0,lon0,dazim,sfcrng,lat3,lon3)
                         write(radar_unit) STID,lat3,lon3,TIM,NLEV,NFLAG
                         write(radar_unit) radar_data%ref(i,j,k)
@@ -3148,11 +3155,11 @@ contains
                   if(sfcrng*RADIAN>radar_data%rgatesp(k))then
                     iazim=ceiling(sfcrng*RADIAN/radar_data%rgatesp(k)/2)
                      do i1=iazim,0,-1
-                        dazim=azim+(i1+0.5)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
+                        dazim=azim+(i1+0.0)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
                         call gcircle(lat0,lon0,dazim,sfcrng,lat1,lon1)
                         write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
                         write(radar_unit)radar_data%zdr(i,j,k), radar_data%cc(i,j,k), radar_data%fdp(i,j,k), radar_data%kdp(i,j,k), radar_data%snr(i,j,k)
-                        dazim=azim-(i1+0.5)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
+                        dazim=azim-(i1+0.0)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
                         call gcircle(lat0,lon0,dazim,sfcrng,lat1,lon1)
                         write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
                         write(radar_unit)radar_data%zdr(i,j,k), radar_data%cc(i,j,k), radar_data%fdp(i,j,k), radar_data%kdp(i,j,k), radar_data%snr(i,j,k)
@@ -3170,8 +3177,104 @@ contains
 
    end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   subroutine copy_radar_data(rdat_in,rdat_out)
+   implicit none
+
+   type(t_radar_data), intent(in ) :: rdat_in
+   type(t_radar_data), intent(out) :: rdat_out
+
+   integer :: RGates,VGates,WGates,MaxRads,MaxCuts
+   integer :: i, j, k, nrad
+
+   MaxCuts=rdat_in%ntilt
+   MaxRads=maxval(rdat_in%nazim           (1:MaxCuts))
+   RGates =maxval(rdat_in%nrgate(1:MaxRads,1:MaxCuts))
+   VGates =maxval(rdat_in%nvgate(1:MaxRads,1:MaxCuts))
+   WGates =maxval(rdat_in%nvgate(1:MaxRads,1:MaxCuts))
+
+   call allocate_radar_data(rdat_out,RGates,VGates,WGates,MaxRads,MaxCuts)
+
+   rdat_out%radar_name  = rdat_in%radar_name
+   rdat_out%radar_type  = rdat_in%radar_type
+   rdat_out%file_format = rdat_in%file_format
+   rdat_out%radar_id    = rdat_in%radar_id
+   rdat_out%latitude    = rdat_in%latitude
+   rdat_out%longitude   = rdat_in%longitude
+   rdat_out%altitude    = rdat_in%altitude
+   rdat_out%vcp         = rdat_in%vcp
+   rdat_out%year        = rdat_in%year
+   rdat_out%month       = rdat_in%month
+   rdat_out%day         = rdat_in%day
+   rdat_out%hour        = rdat_in%hour
+   rdat_out%minute      = rdat_in%minute
+   rdat_out%second      = rdat_in%second
+   rdat_out%ntilt       = rdat_in%ntilt
+   rdat_out%calibConst  = rdat_in%calibConst
+   rdat_out%if_have_loc = rdat_in%if_have_loc
+
+   nrad  =ubound(rdat_out%vel,dim=2)
+   do k=1, rdat_out%ntilt
+      if(.not.rdat_out%ifvel(k))then
+         rdat_out%vmax(k)=VALUE_INVALID
+      endif
+      do j=rdat_out%nazim(k)+1,nrad
+         rdat_out%razim(j,k)=VALUE_INVALID
+         rdat_out%rtilt(j,k)=VALUE_INVALID
+      enddo
+   enddo
+   do k=1,rdat_in%ntilt
+
+      rdat_out%nazim           (k)=rdat_in%nazim           (k)
+      rdat_out%ifref           (k)=rdat_in%ifref           (k)
+      rdat_out%ifvel           (k)=rdat_in%ifvel           (k)
+      rdat_out%rmax            (k)=rdat_in%rmax            (k)
+      rdat_out%vmax            (k)=rdat_in%vmax            (k)
+      rdat_out%rgatesp         (k)=rdat_in%rgatesp         (k)
+      rdat_out%vgatesp         (k)=rdat_in%vgatesp         (k)
+      rdat_out%atmosAttenFactor(k)=rdat_in%atmosAttenFactor(k)
+
+      do j=1, rdat_in%nazim(k)
+         rdat_out%vres  (j,k)=rdat_in%vres  (j,k)
+         rdat_out%nrgate(j,k)=rdat_in%nrgate(j,k)
+         rdat_out%nvgate(j,k)=rdat_in%nvgate(j,k)
+         rdat_out%stime (j,k)=rdat_in%stime (j,k)
+         rdat_out%etime (j,k)=rdat_in%etime (j,k)
+         rdat_out%rtilt (j,k)=rdat_in%rtilt (j,k)
+         rdat_out%razim (j,k)=rdat_in%razim (j,k)
+
+         do i=1, rdat_in%nrgate(j,k)
+            rdat_out%ref(i,j,k)=rdat_in%ref(i,j,k)
+         enddo
+         do i=1, rdat_in%nvgate(j,k)
+            rdat_out%vel(i,j,k)=rdat_in%vel(i,j,k)
+            rdat_out%spw(i,j,k)=rdat_in%spw(i,j,k)
+         enddo
+      enddo
+   enddo
+
+   if(rdat_out%if_have_loc)then
+      do k=1,rdat_in%ntilt
+         do j=1, rdat_in%nazim(k)
+            do i=1, rdat_in%nrgate(j,k)
+               rdat_out%rlat(i,j,k)=rdat_in%rlat(i,j,k)
+               rdat_out%rlon(i,j,k)=rdat_in%rlon(i,j,k)
+               rdat_out%ralt(i,j,k)=rdat_in%ralt(i,j,k)
+            enddo
+            do i=1, rdat_in%nvgate(j,k)
+               rdat_out%vlat(i,j,k)=rdat_in%vlat(i,j,k)
+               rdat_out%vlon(i,j,k)=rdat_in%vlon(i,j,k)
+               rdat_out%valt(i,j,k)=rdat_in%valt(i,j,k)
+            enddo
+         enddo
+      enddo
+   endif
+
+   end subroutine
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine calculate_radar_loc(radar_data)
-   use libradar
+   use libradar, only: beamhgt, gcircle
    implicit none
    type(t_radar_data), intent(inout) :: radar_data
 

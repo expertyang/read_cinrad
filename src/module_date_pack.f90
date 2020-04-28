@@ -13,7 +13,7 @@ MODULE date_pack
       INTEGER      , PARAMETER :: date_str_len = 23
 
       INTEGER      , PARAMETER :: mday(12) = (/ 31 , 28 , 31 , 30 , 31 , 30 , 31 , 31 , 30 , 31 , 30 , 31 /)
-      character(len=3) , PARAMETER :: month_name3(12) = (/ "Jan" , "Feb" , "Mar" , "Apr" , "May" , "Jun" , &
+      character(len=3) , PARAMETER :: month_name (12) = (/ "Jan" , "Feb" , "Mar" , "Apr" , "May" , "Jun" , &
                                                            "Jul" , "Aug" , "Sep" , "Oct" , "Nov" , "Dec" /)
       PRIVATE mday
       
