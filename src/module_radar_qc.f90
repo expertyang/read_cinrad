@@ -231,19 +231,19 @@ contains
    else
       call unfold_radar(rdat)
    endif
-   if(present(bkgvel))then
-   do k=1, maxelev
-      if(.NOT.rdat%ifvel(k)) cycle
-      write(*,*) "=========== Level :", k, "====================="
-      if(allocated(nyq_num))then
-         deallocate(nyq_num)
-      endif
-      allocate(nyq_num(maxvgate,rdat%nazim(k)))
-      call dealias_region(maxvgate,rdat%nazim(k),vel_old(1:maxvgate,1:rdat%nazim(k),k),&
-                                              bkgvel,rdat%vmax(k),value_invalid,nyq_num,&
-                                   rdat%vel(1:maxvgate,1:rdat%nazim(k),k))
-   enddo 
-   endif
+   !if(present(bkgvel))then
+   !do k=1, maxelev
+   !   if(.NOT.rdat%ifvel(k)) cycle
+   !   write(*,*) "=========== Level :", k, "====================="
+   !   if(allocated(nyq_num))then
+   !      deallocate(nyq_num)
+   !   endif
+   !   allocate(nyq_num(maxvgate,rdat%nazim(k)))
+   !   call dealias_region(maxvgate,rdat%nazim(k),vel_old(1:maxvgate,1:rdat%nazim(k),k),&
+   !                                           bkgvel,rdat%vmax(k),value_invalid,nyq_num,&
+   !                                rdat%vel(1:maxvgate,1:rdat%nazim(k),k))
+   !enddo 
+   !endif
    !call write_radar_csv          ("unf."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
    !call write_radar_grads_station("unf."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
     write(*,*) "after unfold"

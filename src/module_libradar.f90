@@ -11,6 +11,9 @@ real(kind=8), parameter :: FOURTHIRDSQ=(FOURTHIRDE*FOURTHIRDE)
 real(kind=8), parameter :: ONE        =1.
 real(kind=8), parameter :: MINUSONE   =-1.
 
+interface quick_sort
+   module procedure quick_sort_int, quick_sort_real
+end interface
 
 contains 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -391,7 +394,7 @@ contains
 !
 
 !
-recursive subroutine quick_sort(a,d,n,s,e) ! little - big
+recursive subroutine quick_sort_real(a,d,n,s,e) ! little - big
 implicit none
   integer :: n    !
   real    :: a(n) !
@@ -443,7 +446,61 @@ implicit none
   ! r
   call quick_sort(a,d,n,r+1,e)
   return
-end subroutine quick_sort
+end subroutine quick_sort_real
  
+recursive subroutine quick_sort_int(a,d,n,s,e) ! little - big
+implicit none
+  integer :: n    !
+  integer :: a(n) !
+  integer :: d(n) !
+  integer :: s    !
+  integer :: e    !
+  integer :: l,r  !
+
+  integer :: k    ! 
+  integer :: temp ! 
+  !
+  l=s
+  r=e+1
+  ! right > left
+  if ( r<=l ) return
+  k=a(s)  !
+  do while(.true.)
+    ! a(l)<k
+    do while( .true. )
+      l=l+1
+      if ( (l>=e) ) exit
+      if ( (a(l) > k) ) exit
+    end do
+    ! a(r)>k
+    do while( .true. )
+      r=r-1
+      if ( (r<=s) ) exit
+      if ( (a(r) < k) ) exit
+    end do
+    ! right left
+    if ( r <= l ) exit
+    ! a(l),a(r)
+    temp=a(l)
+    a(l)=a(r)
+    a(r)=temp
+    temp=d(l)
+    d(l)=d(r)
+    d(r)=temp
+  end do
+  ! a(s),a(r)
+  temp=a(s)
+  a(s)=a(r)
+  a(r)=temp
+  temp=d(s)
+  d(s)=d(r)
+  d(r)=temp
+  ! r
+  call quick_sort(a,d,n,s,r-1)
+  ! r
+  call quick_sort(a,d,n,r+1,e)
+  return
+end subroutine quick_sort_int
+
 end module
 
