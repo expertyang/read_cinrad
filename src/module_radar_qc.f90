@@ -207,7 +207,7 @@ contains
    if(spwthrrat > 0.) then
       CALL spw_threshold_radar(rdat)
     write(*,*) "before unfold"
-    write(*,"(A5,6A10)") "k","Zmin","Zmax","Vmin","Vmax","Wmin","Wmax"
+    write(*,"(A5,6A15)") "k","Zmin","Zmax","Vmin","Vmax","Wmin","Wmax"
     do k=1, maxelev
        call get_maxmin_2d(rdat%ref(:,:,k),min_z, max_z)
        call get_maxmin_2d(rdat%vel(:,:,k),min_v, max_v)
@@ -247,7 +247,7 @@ contains
    !call write_radar_csv          ("unf."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
    !call write_radar_grads_station("unf."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
     write(*,*) "after unfold"
-    write(*,"(A5,6A10)") "k","Zmin","Zmax","Vmin","Vmax","Wmin","Wmax"
+    write(*,"(A5,6A15)") "k","Zmin","Zmax","Vmin","Vmax","Wmin","Wmax"
     do k=1, maxelev
        call get_maxmin_2d(rdat%ref(:,:,k),min_z, max_z)
        call get_maxmin_2d(rdat%vel(:,:,k),min_v, max_v)

@@ -89,7 +89,7 @@ cat >> plot_radar.gs<<EOF
 'set rgb 63 201 100   0'
 'set rgb 64 255   0   0'
 'set cint 2'
-'set clevs  -60 -50 -40 -30 -20 -10  0  10  20 30 40 50 60'
+'set clevs  -40 -30 -20 -15 -10 -5  0  5  10 15 20 30 40'
 'set ccols 51  52  53  54  55 56 57 58 59 60 61 62 63 64 '
 'set digsiz $vdigsiz'
 'set cmark 3'

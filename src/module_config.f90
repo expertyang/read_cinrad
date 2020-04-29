@@ -37,6 +37,13 @@ contains
          n_radar=i
       endif
    enddo
+
+   if(len_trim(wrf_file)==0)then
+      if_use_wrf=.false.
+   endif
+   if(.NOT.if_use_wrf)then
+      if_output_model=.false.
+   endif
    write(*,*) "&file"
    write(*,*) "wrf_file   = ", '"'//trim(wrf_file)//'"'
    write(*,*) "radar_file = ", ('"'//trim(radar_file(i))//'" , ',i=1, n_radar)

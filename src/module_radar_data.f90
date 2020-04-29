@@ -46,7 +46,7 @@ implicit none
       real         , dimension(: , : , :) , allocatable :: vel  , ref  , spw, zdr, kdp, cc, fdp, snr
       real         , dimension(: , : , :) , allocatable :: vlon , vlat , valt
       real         , dimension(: , : , :) , allocatable :: rlon , rlat , ralt
-      logical                                           :: if_have_loc
+      logical                                           :: if_have_loc = .false.
    end type
 
 
@@ -2961,7 +2961,7 @@ contains
 
    integer           :: NFLAG, NLEV
    character(len=8)  :: STID
-   real              :: TIM, VEL, SPW
+   real              :: TIM, VEL, SPW, REF, CC, SNR, ZDR, FDP, KDP
 
    character(len=80) :: endian
 
@@ -3008,7 +3008,13 @@ contains
             elev=radar_data%rtilt(j,k)
             azim=radar_data%razim(j,k)
             do i=1,radar_data%nvgate(j,k)
-               if(radar_data%vel(i,j,k)/=value_invalid)then
+               VEL=radar_data%vel(i,j,k)
+               SPW=radar_data%spw(i,j,k)
+               if(ABS(VEL)>200)then
+                  VEL=value_invalid
+                  SPW=value_invalid
+               endif
+               if(VEL/=value_invalid)then
 !.and.radar_data%spw(i,j,k)/=value_invalid
                   range=i*radar_data%vgatesp(k)
                   call beamhgt(elev,range,height,sfcrng)
@@ -3017,12 +3023,12 @@ contains
                   lon1=radar_data%vlon(i,j,k)
                   write(STID,'(I4,I4)') i,j
                   write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
-                  if(ABS(radar_data%vel(i,j,k))<200.)then
-                     vel=radar_data%vel(i,j,k)
-                  else
-                     vel=value_invalid
-                  endif
-                  spw=radar_data%spw(i,j,k)
+                  !if(ABS(radar_data%vel(i,j,k))<200.)then
+                  !   vel=radar_data%vel(i,j,k)
+                  !else
+                  !   vel=value_invalid
+                  !endif
+                  !spw=radar_data%spw(i,j,k)
                   write(radar_unit) VEL, SPW
                   if(sfcrng*RADIAN>radar_data%vgatesp(k))then
                     iazim=ceiling(sfcrng*RADIAN/radar_data%vgatesp(k)/2)
@@ -3077,25 +3083,30 @@ contains
             elev=radar_data%rtilt(j,k)
             azim=radar_data%razim(j,k)
             do i=1,radar_data%nrgate(j,k)
-               if(radar_data%ref(i,j,k)/=value_invalid)then
+               REF=radar_data%ref(i,j,k)
+               if(ABS(REF)>200)then
+                  REF=value_invalid
+               endif
+               if(REF/=value_invalid)then
                   range=i*radar_data%rgatesp(k)
                   call beamhgt(elev,range,height,sfcrng)
                   !call gcircle(lat0,lon0,azim,sfcrng,lat1,lon1)
                   lat1=radar_data%rlat(i,j,k)
                   lon1=radar_data%rlon(i,j,k)
                   write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
-                  write(radar_unit) radar_data%ref(i,j,k)
+                  write(radar_unit) REF 
+write(79,*) i,i,k,lat1,lon1,ref
                   if(sfcrng*RADIAN>radar_data%rgatesp(k))then
                     iazim=ceiling(sfcrng*RADIAN/radar_data%rgatesp(k)/2)
                      do i1=iazim,0,-1
                         dazim=azim+(i1+0.0)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
                         call gcircle(lat0,lon0,dazim,sfcrng,lat2,lon2)
                         write(radar_unit) STID,lat2,lon2,TIM,NLEV,NFLAG
-                        write(radar_unit) radar_data%ref(i,j,k)
+                        write(radar_unit) REF 
                         dazim=azim-(i1+0.0)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
                         call gcircle(lat0,lon0,dazim,sfcrng,lat3,lon3)
                         write(radar_unit) STID,lat3,lon3,TIM,NLEV,NFLAG
-                        write(radar_unit) radar_data%ref(i,j,k)
+                        write(radar_unit) REF 
 !write(67,*) i,j,k,i1,iazim,lat1, lat2, lat3, lon1, lon2, lon3, radar_data%ref(i,j,k)
                      enddo
                   endif
@@ -3145,24 +3156,36 @@ contains
             elev=radar_data%rtilt(j,k)
             azim=radar_data%razim(j,k)
             do i=1,radar_data%nrgate(j,k)
-               if(radar_data%zdr(i,j,k)/=value_invalid)then
+               ZDR=radar_data%zdr(i,j,k)
+                CC=radar_data%cc (i,j,k)
+               FDP=radar_data%fdp(i,j,k)
+               KDP=radar_data%kdp(i,j,k)
+               SNR=radar_data%snr(i,j,k)
+               if(ABS(ZDR)>200)then
+                  ZDR=value_invalid
+                   CC=value_invalid
+                  FDP=value_invalid
+                  KDP=value_invalid
+                  SNR=value_invalid
+               endif
+               if(ZDR/=value_invalid)then
                   range=i*radar_data%rgatesp(k)
                   call beamhgt(elev,range,height,sfcrng)
                   lat1=radar_data%rlat(i,j,k)
                   lon1=radar_data%rlon(i,j,k)
                   write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
-                  write(radar_unit)radar_data%zdr(i,j,k), radar_data%cc(i,j,k), radar_data%fdp(i,j,k), radar_data%kdp(i,j,k), radar_data%snr(i,j,k)
+                  write(radar_unit) ZDR, CC, FDP, KDP, SNR
                   if(sfcrng*RADIAN>radar_data%rgatesp(k))then
                     iazim=ceiling(sfcrng*RADIAN/radar_data%rgatesp(k)/2)
                      do i1=iazim,0,-1
                         dazim=azim+(i1+0.0)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
                         call gcircle(lat0,lon0,dazim,sfcrng,lat1,lon1)
                         write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
-                        write(radar_unit)radar_data%zdr(i,j,k), radar_data%cc(i,j,k), radar_data%fdp(i,j,k), radar_data%kdp(i,j,k), radar_data%snr(i,j,k)
+                        write(radar_unit) ZDR, CC, FDP, KDP, SNR
                         dazim=azim-(i1+0.0)*radar_data%rgatesp(k)/(sfcrng*RADIAN)
                         call gcircle(lat0,lon0,dazim,sfcrng,lat1,lon1)
                         write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
-                        write(radar_unit)radar_data%zdr(i,j,k), radar_data%cc(i,j,k), radar_data%fdp(i,j,k), radar_data%kdp(i,j,k), radar_data%snr(i,j,k)
+                        write(radar_unit) ZDR, CC, FDP, KDP, SNR
                      enddo
                   endif
                endif
