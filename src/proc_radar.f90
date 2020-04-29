@@ -7,10 +7,11 @@ use radar_data, only: t_radar_data, read_radar_data, get_radar_filename_info, &
                       get_dist_3d, write_radar_grads_station, value_invalid
 use radar_site, only: radar_info, search_radar_site, &
                       read_radar_site, write_radar_site
-use radar_qc, only: qc_radar, build_qc_radar, write_radar_3dv, &
+use radar_qc, only: qc_radar, build_qc_radar, &
                     nzsnd, zsnd, usnd, vsnd, rfrsnd
 use da_tools, only: da_get_radar_rv
 use wrf_data, only: get_wrf_data
+use radar_3dv, only: write_radar_3dv
 implicit none
 
 integer, parameter :: iunit=21

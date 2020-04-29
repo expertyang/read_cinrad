@@ -23,11 +23,11 @@ LIB = -L$(NETCDF)/lib -lnetcdf -lnetcdff
 #FFLAG = -g -O3 -byteswapio -C
 
 #LIB = -L$(NETCDF)/lib -lnetcdf
-OBJS = module_radar_data.o module_bytes.o module_libradar.o \
-       module_date_pack.o module_radar_site.o module_string.o \
-       module_wrf_data.o module_map_utils.o module_radar_qc.o \
-       module_config.o module_radar_region.o module_da_tools.o \
-       module_grd.o
+OBJS = module_radar_data.o module_bytes.o        module_libradar.o \
+       module_date_pack.o  module_radar_site.o   module_string.o \
+       module_wrf_data.o   module_map_utils.o    module_radar_qc.o \
+       module_config.o     module_radar_region.o module_da_tools.o \
+       module_grd.o        module_vdras_prep.o   module_radar_3dv.o
 
 TARGET  = read_cinrad proc_radar
 PACKAGE = read_cinrad
@@ -38,7 +38,7 @@ PACKAGE = read_cinrad
 
 all:	$(TARGET)
 clean:
-	rm -f *.o *.mod  $(TARGET)
+	rm -f *.o *.mod *~ .*~ $(TARGET)
 proc_radar:	proc_radar.o $(OBJS)	
 	$(FC) $(FFLAG) $(OBJS) $@.o -o $@ $(LIB)
 proc_radar.o:	$(OBJS)
@@ -52,7 +52,7 @@ module_wrf_data.o:	module_map_utils.o module_libradar.o
 module_radar_qc.o:	module_radar_data.o module_libradar.o module_config.o module_radar_region.o
 module_radar_region.o:	module_grd.o module_libradar.o
 module_da_tools.o:	module_wrf_data.o module_map_utils.o module_config.o	
-module_radar_qc.o:	module_radar_region.o module_libradar.o
+module_radar_3dv.o:	module_radar_data.o module_radar_qc.o module_libradar.o module_config.o
 
 .f90.o:
 	$(FC) $(INC) $(FFLAG) -c $<

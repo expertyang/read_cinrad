@@ -1,6 +1,7 @@
 program read_cinrad
-use radar_data
-use radar_site
+use radar_data, only: get_radar_filename_info, read_radar_data, &
+                      write_radar_grads_station, t_radar_data
+use radar_site, only: read_radar_site, search_radar_site, radar_info
 implicit none
 
 integer, parameter :: iunit=21

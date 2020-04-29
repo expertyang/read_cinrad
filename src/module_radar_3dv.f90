@@ -1,782 +1,1209 @@
 module radar_3dv
-use libradar
 implicit none
 
-type t_point
-    integer                            :: nlev
-    real                               :: lat, lon, alt, u, v
-    character(len=19)                  :: time
-    real,    dimension(:), allocatable :: hgt, ref, vel, ref_err, vel_err, &
-                                          ref_oma, ref_omb, vel_oma, vel_omb
-    integer, dimension(:), allocatable :: ref_qc, vel_qc
-end type
-
-type t_radar
-    character(len=12)                        :: id
-    integer                                  :: nlev, npoint
-    character(len=19)                        :: time
-    real                                     :: lat, lon, alt
-    type(t_point), dimension(:), allocatable :: point 
-end type
-
-!integer                                  :: nradar
-!type(t_radar), dimension(:), allocatable :: radar
-
-integer, parameter :: radar_unit=901
-
+integer :: maxrgate, maxazim, maxelev, maxvgate
 contains
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   subroutine allocate_point(point_dat)
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   subroutine write_radar_3dv(filename,rdat)
+   use config,     only: min_valid_nyquist
+   use radar_data, only: t_radar_data, radar_unit, get_maxmin_2d
+   use radar_qc,   only: rngrvol, rngvvol, azmvol, elvvol, &
+                         rxvvol, rxrvol, ryvvol, ryrvol, gjelim, &
+                         iordunf, nzsnd, zsnd, usnd, vsnd, rfrsnd, &
+                         refcheck,rngmin,velcheck,velmedl,rngmaxr, rngmaxv
+   use libradar, only: beamrng, xy2rd, gcircle
    implicit none
-   type(t_point), intent(inout) :: point_dat
+   character(len=*),   intent(in) :: filename
+   type(t_radar_data), intent(in) :: rdat
 
-   if(point_dat%nlev<1)return
+   real, parameter :: dgrid =3000. ! 3km grid
+   real, parameter :: miss = -888888.
 
-   if(allocated (point_dat%hgt))then
-      deallocate(point_dat%hgt    )
-      deallocate(point_dat%ref    )
-      deallocate(point_dat%ref_qc )
-      deallocate(point_dat%ref_err)
-      deallocate(point_dat%ref_omb)
-      deallocate(point_dat%ref_oma)
-      deallocate(point_dat%vel    )
-      deallocate(point_dat%vel_qc )
-      deallocate(point_dat%vel_err)
-      deallocate(point_dat%vel_omb)
-      deallocate(point_dat%vel_oma)
-   endif
-   allocate(point_dat%hgt    (point_dat%nlev))
-   allocate(point_dat%ref    (point_dat%nlev))
-   allocate(point_dat%ref_qc (point_dat%nlev))
-   allocate(point_dat%ref_err(point_dat%nlev))
-   allocate(point_dat%ref_omb(point_dat%nlev))
-   allocate(point_dat%ref_oma(point_dat%nlev))
-   allocate(point_dat%vel    (point_dat%nlev))
-   allocate(point_dat%vel_qc (point_dat%nlev))
-   allocate(point_dat%vel_err(point_dat%nlev))
-   allocate(point_dat%vel_omb(point_dat%nlev))
-   allocate(point_dat%vel_oma(point_dat%nlev))
+   real,    dimension(:),     allocatable :: xs, ys, elvavg
+   real,    dimension(:,:,:), allocatable :: refg, velg, hgtg, spwg, rngg
+   integer, dimension(:,:),   allocatable :: iwrite, ks, ke
+   real,    dimension(:,:),   allocatable :: latg, long
 
-   point_dat%ref_omb=0.
-   point_dat%ref_oma=0.
-   point_dat%vel_omb=0.
-   point_dat%vel_oma=0.
+   integer, dimension(:,:,:), allocatable :: refg_qc, velg_qc  ! -1:ground, -2:ref noise, -3:spw noise
+   integer :: nx, ny, nz, nhalf, istatus, ntotal
+   integer :: i, j, k, igate, jazim, kelev, kref, kvel, jstart, kr, kv
+   integer :: ngate, nazim, nelev
 
-   end subroutine
+   real :: azim, sfcrng, range, height, min_var, max_var
+   real, dimension(:), allocatable :: vn
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   subroutine allocate_radar(radar_dat)
-   implicit none
-   type(t_radar), intent(inout) :: radar_dat
+   character(len=80), parameter :: loc_fmt_char="(A5,2X,A12,2(F9.4,1X),F8.1,2X,A19,2I6)"
+   character(len=80), parameter :: col_fmt_char="(A12,3X,A19,2X,2(F12.4,2X),F8.1,2X,I6)"
+   !character(len=80), parameter :: dat_fmt_char="( 3X, F12.1, 2(F12.3,I4,F12.3,2X) )"
+   character(len=80), parameter :: dat_fmt_char="( 3X, F12.1, 3(F12.3,I4,F12.3,2X) )"
 
-   if(radar_dat%npoint<1)return
+   character(len=19) :: chtime
+   integer, dimension(3) :: dims
 
-   if(allocated (radar_dat%point))then
-      deallocate(radar_dat%point)
-   endif
-   allocate(radar_dat%point(radar_dat%npoint))
+   integer :: qc_flag=2
+   real    :: vel_err=4., ref_err=7.5
+                      
+   write(chtime,"(I4.4,'-',I2.2,'-',I2.2,'_',I2.2,':',I2.2,':',I2.2)")  rdat%year,rdat%month ,rdat%day   , &
+                                 rdat%hour,rdat%minute,rdat%second
 
-   end subroutine
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   dims     = ubound(rdat%ref)
+   maxrgate = dims(1)
+   maxazim  = dims(2)
+   maxelev  = rdat%ntilt
+   dims     = ubound(rdat%vel)
+   maxvgate = dims(1)
 
-   subroutine read_radar_omb(filename, radar)
-   implicit none
-   character(len=*), intent(in) :: filename
-   type(t_radar),    intent(out):: radar
-
-   character(len=80  ) :: dat_fmt = "(2I8,A5,2F9.2,F17.7,2(2F17.7,I8,2F17.7))"
-   integer             :: i, n, k, m
-   character(len=10)   :: word
-
-   open(radar_unit,file=filename,status="old")
-   write(*,*) " Reading file:", trim(filename)
-   read(radar_unit,*) word, radar%npoint
-   write(*,*) "Point number in omb:", radar%npoint
-   call allocate_radar(radar)
-
-   do i=1, radar%npoint
-      read(radar_unit,*) radar%point(i)% nlev
-      call allocate_point(radar%point(i))
-      do k=1, radar%point(i)% nlev
-         read(radar_unit,fmt=dat_fmt) n, m, word, & 
-                                      radar%point(i)% lat , &
-                                      radar%point(i)% lon , &
-                                      radar%point(i)% hgt    (k), &
-                                      radar%point(i)% vel    (k), &
-                                      radar%point(i)% vel_omb(k), &
-                                      radar%point(i)% vel_qc (k), &
-                                      radar%point(i)% vel_err(k), &
-                                      radar%point(i)% vel_oma(k), &
-                                      radar%point(i)% ref    (k), &
-                                      radar%point(i)% ref_omb(k), &
-                                      radar%point(i)% ref_qc (k), &
-                                      radar%point(i)% ref_err(k), &
-                                      radar%point(i)% ref_oma(k)
-      enddo
-   enddo
-   close(radar_unit)
-   end subroutine
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   subroutine write_radar_netcdf(filename,radar) !,ifpassqc)
-   use netcdf
-   implicit none
-   character(len=*),  intent(in)  :: filename
-   type(t_radar),     intent(in)  :: radar
-   !logical, optional, intent(out) :: ifpassqc
-
-   real, parameter :: miss = -888888.0
-   integer         :: i, n, k, m, ncid, ierr
-
-   real,    allocatable, dimension(:)   :: lat, lon, hgt
-   real,    allocatable, dimension(:,:) :: vel
-   real,    allocatable, dimension(:,:) :: ref
-   integer, allocatable, dimension(:)   :: lev
-
-   integer :: nvar=5
-   integer :: npoint, dim_npoint, dim_nvar, id_lat, id_lon, id_hgt, id_lev, & 
-                      id_ref, id_ref_oma, id_ref_omb, id_ref_err, id_ref_qc, &
-                      id_vel, id_vel_oma, id_vel_omb, id_vel_err, id_vel_qc
-   logical            :: test_normal
-   character(len=800) :: file3dv
-
-   ierr=nf90_create(filename,nf90_clobber,ncid)
-   IF(ierr==0)THEN
-      WRITE(*,*) "Writing Netcdf File:",TRIM(filename)
-   ELSE
-      WRITE(*,*) "ERROR Open Netcdf File:",TRIM(filename)
-      RETURN
-   ENDIF
-
-   npoint=0
-   do n=1, radar%npoint
-      npoint=npoint+radar%point(n)%nlev
-   enddo
-
-   if(allocated(lat))then
-      deallocate(lat)
-      deallocate(lon)
-      deallocate(hgt)
-      deallocate(vel)
-      deallocate(ref)
-      deallocate(lev)
-   endif
-   allocate(lat(npoint))
-   allocate(lon(npoint))
-   allocate(hgt(npoint))
-   allocate(vel(nvar,npoint))
-   allocate(ref(nvar,npoint))
-   allocate(lev(npoint))
-
-   m=0
-   do n=1, radar%npoint
-      do k=1,radar%point(n)%nlev
-         m=m+1
-         lat(m  )=radar%point(n)%lat
-         lon(m  )=radar%point(n)%lon
-         hgt(m  )=radar%point(n)%hgt    (k)
-         vel(1,m)=radar%point(n)%vel    (k)
-         vel(2,m)=radar%point(n)%vel_omb(k)
-         vel(3,m)=radar%point(n)%vel_qc (k)
-         vel(4,m)=radar%point(n)%vel_err(k)
-         vel(5,m)=radar%point(n)%vel_oma(k)
-         ref(1,m)=radar%point(n)%ref    (k)
-         ref(2,m)=radar%point(n)%ref_omb(k)
-         ref(3,m)=radar%point(n)%ref_qc (k)
-         ref(4,m)=radar%point(n)%ref_err(k)
-         ref(5,m)=radar%point(n)%ref_oma(k)
-         lev(m  )=k
-      enddo
-   enddo
-   
-   ! define dimensions
-   ierr = nf90_def_dim(ncid , 'npoint' , NF90_UNLIMITED, dim_npoint)
-   ierr = nf90_def_dim(ncid , 'nvar'   , nvar, dim_nvar)
-   !write(*,*) ierr, "nvar:",dim_nvar
-
-  ! define Variables
-   ierr = nf90_def_var(ncid, 'lat' , NF90_FLOAT , (/         dim_npoint/) , id_lat )
-   ierr = nf90_def_var(ncid, 'lon' , NF90_FLOAT , (/         dim_npoint/) , id_lon )
-   ierr = nf90_def_var(ncid, 'hgt' , NF90_FLOAT , (/         dim_npoint/) , id_hgt )
-   ierr = nf90_def_var(ncid, 'lev' , NF90_INT   , (/         dim_npoint/) , id_lev )
-   ierr = nf90_def_var(ncid, 'vel' , NF90_FLOAT , (/dim_nvar,dim_npoint/) , id_vel )
-   !write(*,*) ierr, "vel:",id_vel, nf90_strerror(ierr)
-   ierr = nf90_def_var(ncid, 'ref' , NF90_FLOAT , (/dim_nvar,dim_npoint/) , id_ref )
-   !write(*,*) ierr, "ref:",id_ref, nf90_strerror(ierr)
-
-   ! Variable Attributes 
-   ierr = nf90_put_att(ncid, id_lat ,"_FillValue", miss )
-   ierr = nf90_put_att(ncid, id_lon ,"_FillValue", miss )
-   ierr = nf90_put_att(ncid, id_hgt ,"_FillValue", miss )
-   ierr = nf90_put_att(ncid, id_vel ,"_FillValue", miss )
-   ierr = nf90_put_att(ncid, id_ref ,"_FillValue", miss )
-   
-   ierr = nf90_put_att(ncid, id_lat ,"units", "degrees_north" )
-   ierr = nf90_put_att(ncid, id_lon ,"units", "degrees_east" )
-   ierr = nf90_put_att(ncid, id_hgt ,"units", "m" )
-   ierr = nf90_put_att(ncid, id_vel ,"units", "m/s" )
-   ierr = nf90_put_att(ncid, id_ref ,"units", "dB" )
-
-   ierr = nf90_put_att(ncid, id_vel ,"comments", "obs,omb,qc,err,oma" )
-   ierr = nf90_put_att(ncid, id_ref ,"comments", "obs,omb,qc,err,oma" )
-
-   ierr = nf90_enddef(ncid)
-
-   ! Put Variables Data
-   ierr = nf90_put_var(ncid, id_lat , lat )
-   ierr = nf90_put_var(ncid, id_lon , lon )
-   ierr = nf90_put_var(ncid, id_hgt , hgt )
-   ierr = nf90_put_var(ncid, id_lev , lev )
-   ierr = nf90_put_var(ncid, id_vel , vel )
-   ierr = nf90_put_var(ncid, id_ref , ref )
-
-   ierr = nf90_close(ncid)
-   !! test radar(n) normal distribution?
-   !if(present(ifpassqc))then
-   !   ifpassqc=test_normal(nvar,npoint,vel,miss)
-   !endif
-   end subroutine
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-   subroutine read_radar_3dv(filename, nradar, radar)
-   implicit none
-   character(len=*), intent(in)  :: filename
-   integer,          intent(out) :: nradar
-   type(t_radar), dimension(:), allocatable, intent(out) :: radar
-
-   character(len=1024) :: line, word
-   character(len=80  ) :: bhd_fmt, shd_fmt, dat_fmt
-   integer             :: i, n, k
-   real                :: dist, head
-
-   open(radar_unit,file=filename,status="old")
-   write(*,*) " Reading file:", trim(filename)
-   read(radar_unit,*) line,word,nradar
-   write(*,*) "Radar Number:", nradar
-   if(allocated(radar))then
-      deallocate(radar)
-   endif
-   allocate(radar(nradar))
-   read(radar_unit,"(A)") line
-
-   do n=1, nradar
-      read(radar_unit,"(A)") bhd_fmt
-      !write(*,*) "Big Header Format:", trim(bhd_fmt)
-      read(radar_unit,fmt=bhd_fmt) word, radar(n)% id    , &
-                                         radar(n)% lon   , &
-                                         radar(n)% lat   , &
-                                         radar(n)% alt   , &
-                                         radar(n)% time  , &
-                                         radar(n)% npoint, &
-                                         radar(n)% nlev
-      write(*,fmt=bhd_fmt) word, radar(n)% id    , &
-                           radar(n)% lon   , &
-                           radar(n)% lat   , &
-                           radar(n)% alt   , &
-                           radar(n)% time  , &
-                           radar(n)% npoint, &
-                           radar(n)% nlev
-      call allocate_radar(radar(n))
-      read(radar_unit,"(A)") shd_fmt
-      !write(*,*) "Sub Header Format:", trim(shd_fmt)
-      read(radar_unit,"(A)") dat_fmt
-      !write(*,*) "Data Format:", trim(dat_fmt)
-      do i=1, radar(n)%npoint
-         read(radar_unit,fmt=shd_fmt) word, radar(n)%point(i)% time, &
-                                            radar(n)%point(i)% lat , &
-                                            radar(n)%point(i)% lon , &
-                                            radar(n)%point(i)% alt , &
-                                            radar(n)%point(i)% nlev
-         !write(*,fmt=shd_fmt) word, radar(n)%point(i)% time, &
-         !                     radar(n)%point(i)% lat , &
-         !                     radar(n)%point(i)% lon , &
-         !                     radar(n)%point(i)% alt , &
-         !                     radar(n)%point(i)% nlev
-
-         call disthead(radar(n)%point(i)%lat, radar(n)%point(i)%lon, radar(n)%lat, radar(n)%lon, head, dist)
-         call ds2uv(head,1.,radar(n)%point(i)%u,radar(n)%point(i)%v)
-         
-         call allocate_point(radar(n)%point(i))
-         do k=1, radar(n)%point(i)% nlev
-            read(radar_unit,fmt=dat_fmt)  radar(n)%point(i)% hgt(k)    , &
-                                          radar(n)%point(i)% vel(k)    , &
-                                          radar(n)%point(i)% vel_qc(k) , &
-                                          radar(n)%point(i)% vel_err(k), &
-                                          radar(n)%point(i)% ref(k)    , &
-                                          radar(n)%point(i)% ref_qc(k) , &
-                                          radar(n)%point(i)% ref_err(k)
-            !write(*,fmt=dat_fmt)  radar(n)%point(i)% hgt(k)    , &
-            !                      radar(n)%point(i)% vel(k)    , &
-            !                      radar(n)%point(i)% vel_qc(k) , &
-            !                      radar(n)%point(i)% vel_err(k), &
-            !                      radar(n)%point(i)% ref(k)    , &
-            !                      radar(n)%point(i)% ref_qc(k) , &
-            !                      radar(n)%point(i)% ref_err(k)
-         enddo
-      enddo
-   enddo
-   close(radar_unit)
-   end subroutine
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!   subroutine write_radar_3dv_dat(filename,radar)
-!   implicit none
-!   character(len=*), intent(in) :: filename
-!   type(t_radar), intent(in) :: radar
-!
-!   character(len=1024)            :: line, word
-!   character(len=80  ), parameter :: bhd_fmt="(A5,2X,A12,2(F8.3,2X),F8.1,2X,A19,2I6)", &
-!                                     shd_fmt="(A12,3X,A19,2X,2(F12.3,2X),F8.1,2X,I6)", &
-!                                     dat_fmt="( 3X, F12.1, 2(F12.3,I4,F12.3,2X) )"
-!   integer :: i, n, k
-!
-!   open(radar_unit,file=filename,status="unknown")
-!   write(*,*) " Writing file:", trim(filename)
-!   write(radar_unit,"(A,I4)") "Total Radar:",1
-!   write(radar_unit,"(A)") "================================================================================"
-!
-!   write(radar_unit,"(A)") bhd_fmt
-!   write(radar_unit,fmt=bhd_fmt) "RADAR", radar% id    , &
-!                                          radar% lon   , &
-!                                          radar% lat   , &
-!                                          radar% alt   , &
-!                                          radar% time  , &
-!                                          radar% npoint, &
-!                                          radar% nlev
-!   write(radar_unit,"(A)") shd_fmt
-!   write(radar_unit,"(A)") dat_fmt
-!   do i=1, radar%npoint
-!      write(radar_unit,fmt=shd_fmt) "FM-128      ", radar%point(i)% time, &
-!                                                    radar%point(i)% lat , &
-!                                                    radar%point(i)% lon , &
-!                                                    radar%point(i)% alt , &
-!                                                    radar%point(i)% nlev
-!
-!      do k=1, radar%point(i)% nlev
-!
-!         write(radar_unit,fmt=dat_fmt) radar%point(i)% hgt(k)    , &
-!                                       radar%point(i)% vel(k)    , &
-!                                       radar%point(i)% vel_qc(k) , &
-!                                       radar%point(i)% vel_err(k), &
-!                                       radar%point(i)% ref(k)    , &
-!                                       radar%point(i)% ref_qc(k) , &
-!                                       radar%point(i)% ref_err(k)
-!      enddo
-!   enddo
-!   close(radar_unit)
-!   end subroutine
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   subroutine write_radar_3dv(filename, nradar, radar)
-   implicit none
-   character(len=*), intent(in) :: filename
-   integer,          intent(in) :: nradar
-   type(t_radar), dimension(nradar), intent(in) :: radar
-
-   character(len=1024)            :: line, word
-   character(len=80  ), parameter :: bhd_fmt="(A5,2X,A12,2(F8.3,2X),F8.1,2X,A19,2I6)", &
-                                     shd_fmt="(A12,3X,A19,2X,2(F12.3,2X),F8.1,2X,I6)", &
-                                     dat_fmt="( 3X, F12.1, 2(F12.3,I4,F12.3,2X) )"
-   integer :: i, n, k
-
-   open(radar_unit,file=filename,status="unknown")
-   write(*,*) " Writing file:", trim(filename)
-   write(radar_unit,"(A,I4)") "Total Radar:",nradar
-   write(radar_unit,"(A)") "================================================================================"
-
-   do n=1, nradar
-      write(radar_unit,"(A)") bhd_fmt
-      write(radar_unit,fmt=bhd_fmt) "RADAR", radar(n)% id    , &
-                                             radar(n)% lon   , &
-                                             radar(n)% lat   , &
-                                             radar(n)% alt   , &
-                                             radar(n)% time  , &
-                                             radar(n)% npoint, &
-                                             radar(n)% nlev
-      write(radar_unit,"(A)") shd_fmt
-      write(radar_unit,"(A)") dat_fmt
-      do i=1, radar(n)%npoint
-         write(radar_unit,fmt=shd_fmt) "FM-128      ", radar(n)%point(i)% time, &
-                                                       radar(n)%point(i)% lat , &
-                                                       radar(n)%point(i)% lon , &
-                                                       radar(n)%point(i)% alt , &
-                                                       radar(n)%point(i)% nlev
-
-         do k=1, radar(n)%point(i)% nlev
-
-            write(radar_unit,fmt=dat_fmt) radar(n)%point(i)% hgt(k)    , &
-                                          radar(n)%point(i)% vel(k)    , &
-                                          radar(n)%point(i)% vel_qc(k) , &
-                                          radar(n)%point(i)% vel_err(k), &
-                                          radar(n)%point(i)% ref(k)    , &
-                                          radar(n)%point(i)% ref_qc(k) , &
-                                          radar(n)%point(i)% ref_err(k)
-         enddo
-      enddo
-   enddo
-   close(radar_unit)
-   end subroutine
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   subroutine trim_radar(nradar,dkm,radar,radar_out)
-   implicit none
-   integer,                          intent(in)  :: nradar
-   type(t_radar), dimension(nradar), intent(in)  :: radar
-   type(t_radar), dimension(:), allocatable, intent(out) :: radar_out
-   real,                             intent(in)  :: dkm
-
-   integer :: i, j, k, n, nx, ny, np, i1, j1
-
-   integer, dimension(:,:), allocatable :: idx
-   real, dimension(:), allocatable :: x, y
-   real :: rng, azm, minx, maxx, miny, maxy, dis1, dis2, x1, y1, dx
-
-   write(*,*) "Triming Radar 3dv..."
-   dx=dkm*1000.
-   allocate(radar_out(nradar))
-   do n=1, nradar
-      if(allocated(x))then
-         deallocate(x)
-         deallocate(y)
+   nz=0
+   do k=1, maxelev
+      if(rdat%ifvel(k))then
+         nz=nz+1
       endif
-      allocate(x(radar(n)%npoint))
-      allocate(y(radar(n)%npoint))
-      do i=1, radar(n)%npoint
-         call disthead(radar(n)%lat,radar(n)%lon,radar(n)%point(i)%lat,radar(n)%point(i)%lon,azm,rng)    
-         call rd2xy(rng,azm,x(i),y(i))
-      enddo
-      minx=floor  (minval(x)/dx)*dx
-      maxx=ceiling(maxval(x)/dx)*dx
-      miny=floor  (minval(y)/dx)*dx
-      maxy=ceiling(maxval(y)/dx)*dx
-      nx=(maxx-minx)/dx+1
-      ny=(maxy-miny)/dx+1
-      !write(*,*) "min,max:",minx,maxx,miny,maxy,nx,ny,minval(x),maxval(x),minval(y),maxval(y)
-      if(allocated(idx))then
-         deallocate(idx)
-      endif 
-      allocate(idx(nx,ny))
-      idx=0
-      do i=1, radar(n)%npoint
-         i1=int((x(i)-minx)/dx+0.5)+1
-         j1=int((y(i)-miny)/dx+0.5)+1
-         if(i1<1.or.j1<1.or.i1>nx.or.j1>ny)then
-            write(*,"(A,4F10.0,2I6,4F13.3)")"minmax:",minx,maxx,miny,maxy,nx,ny,minval(x),maxval(x),minval(y),maxval(y)
-            write(*,"(A,I6,5F13.3,5I6)")"nearest",i, x(i), y(i), minx, miny, dx, i1, j1, nx, ny!, idx(i1,j1)
-            cycle         
-         endif
-         if(idx(i1,j1)==0)then
-            idx(i1,j1)=i
-         else
-            x1=x(idx(i1,j1))-(i1*dx+minx)
-            y1=y(idx(i1,j1))-(j1*dx+miny)
-            dis1=sqrt(x1*x1+y1*y1)
-            x1=x(i)-(i1*dx+minx)
-            y1=y(i)-(j1*dx+miny)
-            dis2=sqrt(x1*x1+y1*y1)
-!           write(*,*) "nearest",i, i1, j1, idx(i1,j1), dis1, dis2
-            if(dis2<dis1) idx(i1,j1)=i
-         endif
-      enddo
-      np=0
-      do i=1, nx
-         do j=1, ny
-            if(idx(i,j)>0) np=np+1
-         enddo
-      enddo
-      radar_out(n)%npoint=np
-      radar_out(n)% id   =radar(n)% id    
-      radar_out(n)% lon  =radar(n)% lon   
-      radar_out(n)% lat  =radar(n)% lat   
-      radar_out(n)% alt  =radar(n)% alt   
-      radar_out(n)% time =radar(n)% time  
-      radar_out(n)% nlev =radar(n)% nlev   
+   enddo 
 
-      call allocate_radar(radar_out(n))
-      i1=0
-      do i=1, nx
-         do j=1, ny
-            if(idx(i,j)>0)then
-               i1=i1+1      
-               radar_out(n)%point(i1)% time=radar(n)%point(idx(i,j))% time
-               radar_out(n)%point(i1)% lat =radar(n)%point(idx(i,j))% lat 
-               radar_out(n)%point(i1)% lon =radar(n)%point(idx(i,j))% lon 
-               radar_out(n)%point(i1)% alt =radar(n)%point(idx(i,j))% alt 
-               radar_out(n)%point(i1)% nlev=radar(n)%point(idx(i,j))% nlev
-
-               call allocate_point(radar_out(n)%point(i1))
-               radar_out(n)%point(i1)% hgt    =radar(n)%point(idx(i,j))% hgt
-               radar_out(n)%point(i1)% vel    =radar(n)%point(idx(i,j))% vel
-               radar_out(n)%point(i1)% vel_qc =radar(n)%point(idx(i,j))% vel_qc
-               radar_out(n)%point(i1)% vel_err=radar(n)%point(idx(i,j))% vel_err
-               radar_out(n)%point(i1)% ref    =radar(n)%point(idx(i,j))% ref
-               radar_out(n)%point(i1)% ref_qc =radar(n)%point(idx(i,j))% ref_qc
-               radar_out(n)%point(i1)% ref_err=radar(n)%point(idx(i,j))% ref_err
-
-            endif 
-         enddo
-      enddo
-
-     write(*,*) "Trim radar", trim(radar(n)%id),radar(n)%npoint,'->',radar_out(n)%npoint
-
-   enddo
-   end subroutine
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   subroutine write_radar_max(filename,nradar,radar)
-   use libradar, only: quick_sort
-   implicit none
-   character(len=*),   intent(in) :: filename
-   integer,          intent(in) :: nradar
-   type(t_radar), dimension(nradar), intent(in) :: radar
-
-   character(len=800) :: fileout, ctlfile, datfile, mapfile
-   integer            :: i, j, k, n, ntotal
-   real, parameter    :: miss=-888888.0
-
-   INTEGER          :: NFLAG, NLEV
-   CHARACTER(LEN=8) :: STID
-   REAL             :: TIM, level
-
-   real, dimension(:), allocatable ::  lat, lon, ref, vel, hgt, tmp
-   integer, dimension(:), allocatable :: top 
+   nx=maxval(rdat%rmax(1:maxelev))/dgrid*2+1
+   ny=nx
    
-   ntotal=0
-   do n=1,nradar
-      do i=1, radar(n)%npoint
-         !ntotal=ntotal+radar(n)%point(i)% nlev 
-         do j=1, radar(n)%point(i)% nlev
-            write(901,*) n,i,j,radar(n)%point(i)%ref_qc(j),radar(n)%point(i)%ref_qc(j)>=0
-            if(radar(n)%point(i)%ref_qc(j)>=0)then
-               ntotal=ntotal+1 
-            endif
-         enddo 
-      enddo 
+   allocate(    xs(nx      ))
+   allocate(    ys(   ny   ))
+   allocate(  latg(nx,ny   ))
+   allocate(  long(nx,ny   ))
+   allocate(iwrite(nx,ny   ))
+   allocate(    ks(nx,ny   ))
+   allocate(    ke(nx,ny   ))
+   allocate(  refg(nx,ny,nz))
+   allocate(  velg(nx,ny,nz))
+   allocate(  hgtg(nx,ny,nz))
+   allocate(  spwg(nx,ny,nz))
+   allocate(velg_qc(nx,ny,nz))
+   allocate(refg_qc(nx,ny,nz))
+   allocate(  rngg(nx,ny,nz))
+   allocate(vn(nz))
+
+   allocate(elvavg(maxelev))
+
+   do k=1, maxelev
+      elvavg(k)=sum(rdat%rtilt(1:rdat%nazim(k),k))/rdat%nazim(k)
    enddo
-   allocate(lat(ntotal))
-   allocate(lon(ntotal))
-   allocate(ref(ntotal))
-   allocate(vel(ntotal))
-   allocate(hgt(ntotal))
-   allocate(tmp(ntotal))
-   allocate(top(ntotal))
- 
-   ref=miss
-   vel=miss
-   k=0
-   do n=1,nradar
-      do i=1, radar(n)%npoint
-         do j=1, radar(n)%point(i)% nlev
-            if(radar(n)%point(i)%ref_qc(j)>=0)then
-               k=k+1
-               lat(k)=radar(n)%point(i)%lat
-               lon(k)=radar(n)%point(i)%lon
-               ref(k)=radar(n)%point(i)%ref(j)
-               vel(k)=radar(n)%point(i)%vel(j)
-               hgt(k)=radar(n)%point(i)%hgt(j)
-            endif
-         enddo 
-      enddo 
+
+   nhalf=nx/2+1
+   do i=1, nx
+      xs(i)=(i-nhalf)*dgrid
    enddo
-   write(*,*) "in write_radar_max: sorting", ntotal
-   tmp=ref
-   do i=1, ntotal
-      top(i)=i
+   do j=1, ny
+      ys(j)=(j-nhalf)*dgrid
    enddo
-   call quick_sort(tmp,top,ntotal,1,ntotal)
-   !!do i=1, ntotal
-   !!   write(98 ,*) top(i), ref(top(i))
-   !!enddo
-   !call calc_top(-ref,ntotal,top,ntotal)
-   !do i=1, ntotal
-   !   write(99 ,*) top(i), ref(top(i))
-   !enddo
+   iwrite=0
+  
+   write(*,*) " Remap radar ref and vel..."
+   refg_qc=-88
+   velg_qc=-88
 
-   ctlfile=trim(filename)//".data.ctl"
-   datfile=trim(filename)//".data.dat"
-   mapfile=trim(filename)//".data.map"
-
-   open(radar_unit,file=ctlfile,status="unknown")
-   write(*,*) "write grads ctl file:", trim(ctlfile)
-   write(radar_unit,"(A       )") "DSET ^"//trim(datfile)
-   write(radar_unit,"(A       )") "DTYPE station"
-   write(radar_unit,"(A       )") "OPTIONS sequential big_endian"
-   write(radar_unit,"(A       )") "STNMAP "//trim(mapfile)
-   write(radar_unit,"(A,F12.1 )") "UNDEF ", miss
-   write(radar_unit,"(A       )") "TITLE  Station Data Sample"
-   write(radar_unit,"(A       )") "TDEF   1 linear 00z01jan2000 1hr"
-   write(radar_unit,"(A       )") "VARS 3"
-   write(radar_unit,"(A,I4,A  )") "h    0  99  Height           (m)  "
-   write(radar_unit,"(A,I4,A  )") "z    0  99  Reflectivity     (dB) "
-   write(radar_unit,"(A,I4,A  )") "v    0  99  Radical Velocity (m/s)"
-   write(radar_unit,"(A       )") "ENDVARS"
-   close(radar_unit)
-
-   open(radar_unit,file=datfile,form="unformatted",status="unknown")
-   write(*,*) "write grads dat file:", trim(datfile)
-   TIM = 0.0
-   NFLAG = 1 ! If surface variables present.
-   NLEV=1
-
-   do k=1, ntotal
-      write(STID,'(I8)') k
-      write(radar_unit) STID,lat(top(k)),lon(top(k)),TIM,NLEV,NFLAG
-      write(radar_unit) hgt(top(k)),ref(top(k)),vel(top(k))
-   enddo
-   NLEV = 0
-   WRITE(radar_unit) STID,0.,0.,TIM,NLEV,NFLAG
-   close(radar_unit)
-   end subroutine
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-   subroutine write_radar_point(filename,nradar,radar)
-   implicit none
-   character(len=*),   intent(in) :: filename
-   integer,          intent(in) :: nradar
-   type(t_radar), dimension(nradar), intent(in) :: radar
-
-   character(len=800) :: fileout, ctlfile, datfile, mapfile
-   integer            :: i, j, k, n
-   real, parameter    :: miss=-888888.0
-
-   INTEGER          :: NFLAG, NLEV
-   CHARACTER(LEN=8) :: STID
-   REAL             :: TIM, level
-
-   real, dimension(:), allocatable ::  ref, vel, hgt
-   
-   NLEV=radar(1)%point(1)%nlev
-   do n=1,nradar
-      NLEV=max(nlev,maxval(radar(n)%point(:)%nlev))
-   enddo
-   allocate(ref(NLEV))
-   allocate(vel(NLEV))
-   allocate(hgt(NLEV))
- 
-   ctlfile=trim(filename)//".data.ctl"
-   datfile=trim(filename)//".data.dat"
-   mapfile=trim(filename)//".data.map"
-
-   open(radar_unit,file=ctlfile,status="unknown")
-   write(radar_unit,"(A       )") "DSET ^"//trim(datfile)
-   write(radar_unit,"(A       )") "DTYPE station"
-   write(radar_unit,"(A       )") "OPTIONS sequential big_endian"
-   write(radar_unit,"(A       )") "STNMAP "//trim(mapfile)
-   write(radar_unit,"(A,F12.1 )") "UNDEF ", miss
-   write(radar_unit,"(A       )") "TITLE  Station Data Sample"
-   write(radar_unit,"(A       )") "TDEF   1 linear 00z01jan2000 1hr"
-   write(radar_unit,"(A       )") "VARS 5"
-   write(radar_unit,"(A,I4,A  )") "h    ",NLEV,"  99  Height           (m)  "
-   write(radar_unit,"(A,I4,A  )") "z    ",NLEV,"  99  Reflectivity     (dB) "
-   write(radar_unit,"(A,I4,A  )") "rv   ",NLEV,"  99  Radical Velocity (m/s)"
-   write(radar_unit,"(A,I4,A  )") "u    ",NLEV,"  99  U-Wind           (m/s)"
-   write(radar_unit,"(A,I4,A  )") "v    ",NLEV,"  99  V-Wind           (m/s)"
-   write(radar_unit,"(A       )") "ENDVARS"
-   close(radar_unit)
-
-   open(radar_unit,file=datfile,form="unformatted",status="unknown")
-   TIM = 0.0
-   NFLAG = 0 ! If surface variables present.
-
-   do n=1, nradar
-      do i=1, radar(n)%npoint
-         ref=miss
-         vel=miss
-         hgt=miss
-         write(STID,'(I3,I5)') n,i
-         write(radar_unit) STID,radar(n)%point(i)%lat, radar(n)%point(i)%lon,TIM,NLEV,NFLAG
-         do k=1, radar(n)%point(i)%nlev
-            ref(k)=radar(n)%point(i)%ref(k)
-            vel(k)=radar(n)%point(i)%vel(k)
-            hgt(k)=radar(n)%point(i)%hgt(k)
+   write(*,*) "maxrgate,maxvgate,maxazim:", maxrgate, maxvgate, maxazim
+   kref=0
+   kvel=0
+   do kelev=1, maxelev
+      write(*,*) " Remaping Elevation:", kelev
+      if(rdat%ifref(kelev))then
+         kref=kref+1
+         !write(701,*) "remap ref",kref,kelev
+         !min_var=999.
+         !max_var=-999.
+         !do i=1, maxrgate
+         !   do j=1, maxazim
+         !      if(rdat%ref(i,j,kelev)>refcheck)then
+         !         if(rdat%ref(i,j,kelev)<min_var)then
+         !            !write(701,*) "min_var",i,j,kelev,min_var,rdat%ref(i,j,kelev)
+         !            min_var=rdat%ref(i,j,kelev)
+         !         endif
+         !         if(rdat%ref(i,j,kelev)>max_var)then
+         !            write(701,*) "max_var",i,j,kelev,max_var,rdat%ref(i,j,kelev)
+         !            max_var=rdat%ref(i,j,kelev)
+         !         endif
+         !      endif
+         !   enddo
+         !enddo
+         !write(*,*) "ref min,max:",min_var, max_var
+         call get_maxmin_2d(rdat%ref(:,:,kelev),min_var,max_var)
+         write(*,*) "ref min,max:",min_var, max_var
+!       stop 
+         call remap2d(maxrgate,maxazim,1,nx,ny,nzsnd,                                           &
+                      refcheck,miss,velmedl,5.,iordunf,                                         &
+                      rdat%nrgate(1:maxazim,kelev),rdat%nazim(kelev),1,                        &
+                      rdat%latitude,rdat%longitude,0.,0.,rdat%altitude,1.,                      &
+                      rngmin,rngmaxr(kelev),                                                    &
+                      rngrvol(:,kelev),azmvol(:,kelev),elvvol(:,kelev),                         &
+                      rdat%ref(1:maxrgate,1:maxazim,kelev),rxrvol(:,:,kelev),ryrvol(:,:,kelev), &
+                      xs,ys,zsnd,rfrsnd,refg(1:nx,1:ny,kref),istatus)
+         do j=1, ny
+            do i=1, nx
+               sfcrng=sqrt(xs(i)*xs(i)+ys(j)*ys(j))
+               call beamrng(elvavg(kelev),sfcrng,height,range)
+!write(88,*) range, (-80.+20.*log(range)/log(10.)), refg(i,j,kref)
+               !if(refg(i,j,kref)<(-80.+20.*log(range)/log(10.))) refg(i,j,kref)=miss 
+               hgtg(i,j,kref)=height+rdat%altitude
+               rngg(i,j,kref)=range
+            enddo
          enddo
-         do k=1, NLEV
-            level=k
-            !write(*,"(F6.0,5F12.1)") level,hgt(k),ref(k),vel(k),radar(n)%point(i)%u,radar(n)%point(i)%v
+      endif
+      if(rdat%ifvel(kelev))then
+         kvel=kvel+1
+         !write(701,*) "remap vel",kvel,kelev
+         !min_var=999.
+         !max_var=-999.
+         !do i=1, maxvgate
+         !   do j=1, maxazim
+         !      if(rdat%vel(i,j,kelev)>velcheck)then
+         !         if(rdat%vel(i,j,kelev)<min_var)then
+         !            write(701,*) "min_var",i,j,kelev,min_var,rdat%vel(i,j,kelev)
+         !            min_var=rdat%vel(i,j,kelev)
+         !         endif
+         !         if(rdat%vel(i,j,kelev)>max_var)then
+         !            write(701,*) "max_var",i,j,kelev,max_var,rdat%vel(i,j,kelev)
+         !            max_var=rdat%vel(i,j,kelev)
+         !         endif
+         !      endif
+         !   enddo
+         !enddo
+         !write(*,*) "vel min,max:",min_var, max_var
+         call get_maxmin_2d(rdat%vel(:,:,kelev),min_var,max_var)
+         write(*,*) "vel min,max:",min_var, max_var
+         call remap2d(maxvgate,maxazim,1,nx,ny,nzsnd,                                           &
+                      velcheck,miss,velmedl,5.,iordunf,                                         &
+                      rdat%nvgate(1:maxazim,kelev),rdat%nazim(kelev),1,                        &
+                      rdat%latitude,rdat%longitude,0.,0.,rdat%altitude,1.,                      &
+                      rngmin,rngmaxv(kelev),                                                    &
+                      rngvvol(:,kelev),azmvol(:,kelev),elvvol(:,kelev),                         &
+                      rdat%vel(1:maxvgate,1:maxazim,kelev),rxvvol(:,:,kelev),ryvvol(:,:,kelev), &
+                      xs,ys,zsnd,rfrsnd,velg(:,:,kvel),istatus)
+         !write(701,*) "remap spw",kvel,kelev
+         call remap2d(maxvgate,maxazim,1,nx,ny,nzsnd,                                           &
+                      velcheck,miss,velmedl,5.,iordunf,                                         &
+                      rdat%nvgate(1:maxazim,kelev),rdat%nazim(kelev),1,                        &
+                      rdat%latitude,rdat%longitude,0.,0.,rdat%altitude,1.,                      &
+                      rngmin,rngmaxv(kelev),                                                    &
+                      rngvvol(:,kelev),azmvol(:,kelev),elvvol(:,kelev),                         &
+                      rdat%spw(1:maxvgate,1:maxazim,kelev),rxvvol(:,:,kelev),ryvvol(:,:,kelev), &
+                      xs,ys,zsnd,rfrsnd,spwg(:,:,kvel),istatus)
+         vn(kvel)=rdat%vmax(kelev)
 
-            write(radar_unit) level,hgt(k),ref(k),vel(k), &
-                              vel(k)*radar(n)%point(i)%u, &
-                              vel(k)*radar(n)%point(i)%v
+      endif
+  
+   enddo
+
+   ks=0
+   ke=1 
+   do j=1, ny
+      do i=1, nx
+         do k=1, min(nz,7) ! delete 2 high elevation
+            if((abs(velg(i,j,k))<200.and.abs(spwg(i,j,k))<200).or.abs(refg(i,j,k))<200)then
+               refg_qc(i,j,k)=0
+               velg_qc(i,j,k)=0
+            
+               ! remove clearsky echo.
+               ! refg <20-0.004*(hgtg-radar_alt) 
+               height=hgtg(i,j,k)-rdat%altitude
+               if(refg(i,j,k)<(20-0.004*height))then
+                  refg_qc(i,j,k)=-1
+                  velg_qc(i,j,k)=-1
+               endif
+               ! ref noise
+               !if(refg(i,j,k)<(-80.+20.*log(rngg(i,j,k))/log(10.)))then
+               !   refg_qc(i,j,k)=-2
+               !   velg_qc(i,j,k)=-2
+               !endif
+
+               ! spw noise
+               if(spwg(i,j,k)>8..or.spwg(i,j,k)<1.5)then
+               !  refg_qc(i,j,k)=-2
+                  velg_qc(i,j,k)=-2
+               endif
+
+               ! range check
+               if(rngg(i,j,k)>rdat%rmax(k))then
+                  refg_qc(i,j,k)=-3
+                  velg_qc(i,j,k)=-3
+               endif
+
+               ! height check
+               if(height>15000)then
+                  refg_qc(i,j,k)=-4
+                  velg_qc(i,j,k)=-4
+               endif
+
+               ! interpolate error
+               if(abs(velg(i,j,k))>200.)then
+                  velg_qc(i,j,k)=-6
+               endif
+
+               ! nyquist vel
+               if(abs(vn(k))<min_valid_nyquist)then
+                  velg_qc(i,j,k)=-7
+               endif
+
+               if(ks(i,j)==0) ks(i,j)=k
+               ke(i,j)=k
+            else
+               refg_qc(i,j,k)=-5
+               velg_qc(i,j,k)=-5
+            endif
          enddo
+         if(ks(i,j)/=0)then
+            call xy2rd(xs(i),ys(j),sfcrng,azim)
+            call gcircle(rdat%latitude,rdat%longitude,azim,sfcrng,latg(i,j),long(i,j))
+            iwrite(i,j)=1
+         endif
+
+         do k=1, nz
+            if(abs(velg(i,j,k))>200..and.velg(i,j,k)/=miss)then
+               write(602,*) i,j,k,velg(i,j,k),latg(i,j),long(i,j),rngg(i,j,k), hgtg(i,j,k)
+            endif
+            if(velg(i,j,k)/=miss.and.spwg(i,j,k)/=miss.and.refg(i,j,k)/=miss)then
+               write(91,*) latg(i,j),long(i,j), hgtg(i,j,k), velg(i,j,k), vn(k), refg(i,j,k), spwg(i,j,k)
+            elseif(velg(i,j,k)/=miss.or.refg(i,j,k)/=miss)then
+               write(92,*) latg(i,j),long(i,j), hgtg(i,j,k), velg(i,j,k), vn(k), refg(i,j,k), spwg(i,j,k)
+            endif
+         enddo
+
       enddo
    enddo
-   NLEV = 0
-   WRITE(radar_unit) STID,0.,0.,TIM,NLEV,NFLAG
-   close(radar_unit)
+
+   ntotal=sum(iwrite)
+   if(ntotal>0)then
+      OPEN(radar_unit,FILE=filename,STATUS='unknown',FORM='formatted')
+
+      write(*,*) "Writing radar_3dv file:", trim(filename)
+      write(radar_unit,'(A12,I3)') "Total Radar:",1
+      write(radar_unit,'(A80)')"================================================================================"
+      write(radar_unit,'(A80)') loc_fmt_char
+      write(radar_unit,fmt=loc_fmt_char) "RADAR",rdat%radar_id,rdat%longitude,rdat%latitude,rdat%altitude,chtime,ntotal,maxval(ke-ks+1)
+      write(radar_unit,'(A80)') col_fmt_char
+      write(radar_unit,'(A80)') dat_fmt_char
+      DO i=1, nx 
+         do j=1, ny
+            if(iwrite(i,j)>0)then
+               write(radar_unit,fmt=col_fmt_char) "FM-128      ",chtime,latg(i,j),long(i,j),hgtg(i,j,1),ke(i,j)-ks(i,j)+1
+               DO k=ks(i,j),ke(i,j)
+                  write(radar_unit,fmt=dat_fmt_char) hgtg(i,j,k),velg(i,j,k),velg_qc(i,j,k), vel_err, &
+                                                                 refg(i,j,k),refg_qc(i,j,k), ref_err, &
+                                                                 spwg(i,j,k),k, vn(k)
+
+               ENDDO
+            endif
+         enddo
+      enddo
+
+      CLOSE(radar_unit)
+   endif
 
    end subroutine
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  SUBROUTINE remap2d(maxgate,maxazim,maxelev,nx,ny,nzsnd,                 &
+                      varchek,varmiss,vmedlim,dazlim,iorder,              &
+                      kntgate,kntazim,kntelev,                            &
+                      rdrlat,rdrlon,radarx,radary,rdralt,dazim,           &
+                      rngmin,rngmax,                                      &
+                      rngvol,azmvol,elvvol,                               &
+                      varvol,rxvol,ryvol,                                 &
+                      xs,ys,zsnd,rfrsnd,gridvar,istatus)
+   use libradar, only: beamhgt
+   use radar_qc, only: gjelim
+!
+!-----------------------------------------------------------------------
+!
+!  PURPOSE:
+!
+!  Take data from the lowest tilt and remap it onto a plane for 
+!  purposes of display in comparison to the ARPS k=2 reflectivity.
+!  Uses a least squares a local quadratic fit to remap the data.
+!
+!-----------------------------------------------------------------------
+!
+!  AUTHOR: Keith Brewster, CAPS
+!          June, 2002
+!
+!  MODIFICATION HISTORY:
+!
+!-----------------------------------------------------------------------
+!
+!  INPUT :
+!
+!    maxgate   Maximum gates in a radial
+!    maxazim   Maximum radials per tilt
+!    maxelev   Maximum number of tilts
+!
+!    nx       Number of grid points in the x-direction (east/west)
+!    ny       Number of grid points in the y-direction (north/south)
+!    nz       Number of grid points in the vertical
+!
+!    varid    Radar variable ID for diagnostic file writing
+!    varname  Name of radar variable for diagnostic file writing
+!    varunit  Units of radar variable for diagnostic file writing
+!
+!    varchek  Threshold for checking data, good vs. flagged
+!    varmiss  Value to assign to data for missing
+!    vmedlim  Threshold limit for median check
+!    dazlim   Maximum value of azimuth difference (grid vs data) to accept
+!             Generally should be 30 degrees or less for velocity, 360 for refl
+!    rngmin   Minimum range (m) of data to use 
+!            (10 000 m or more to eliminate near field ground targets).
+!    rngmax   Maximum range (m) of data to use 
+!
+!    rngvvol  Range to gate in velocity 3-D volume
+!    azmvvol  Azimuth angle in velocity 3-D volume
+!    elvvvol  Elevation angle in velocity 3-D volume
+!    varvol   Radar data 3-D volume
+!
+!    xs       x coordinate of scalar grid points in physical/comp. space (m)
+!    ys       y coordinate of scalar grid points in physical/comp. space (m)
+!    zps      Vertical coordinate of scalar grid points in physical space(m)
+!
+!  OUTPUT:
+!
+!    rxvol    x-coordinate at radar data location
+!    ryvol    y-coordinate at radar data location
+!
+!    gridvar  Radar variable remapped to scalar points
+!
+!    istatus  Status indicator
+!
+!-----------------------------------------------------------------------
+!
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!   subroutine write_radar_point(filename)
-!   implicit none
-!   character(len=*),   intent(in) :: filename
 !
-!   character(len=800) :: fileout, ctlfile, datfile, mapfile
-!   integer            :: i, j, k, n
-!   real, parameter    :: miss=-888888.0
+!-----------------------------------------------------------------------
 !
-!   INTEGER          :: NFLAG, NLEV
-!   CHARACTER(LEN=8) :: STID
-!   REAL             :: TIM, level
+!  Variable Declarations.
 !
-!   real, dimension(:), allocatable ::  ref, vel, hgt
-!   
-!   NLEV=radar(1)%point(1)%nlev
-!   do n=1,nradar
-!      NLEV=max(nlev,maxval(radar(n)%point(:)%nlev))
-!   enddo
-!   allocate(ref(NLEV))
-!   allocate(vel(NLEV))
-!   allocate(hgt(NLEV))
+!-----------------------------------------------------------------------
+!
+  IMPLICIT NONE
+!
+  INTEGER, INTENT(IN) :: maxgate
+  INTEGER, INTENT(IN) :: maxazim
+  INTEGER, INTENT(IN) :: maxelev
+  INTEGER, INTENT(IN) :: nx
+  INTEGER, INTENT(IN) :: ny
+  INTEGER, INTENT(IN) :: nzsnd
+
+  REAL, INTENT(IN)    :: varchek
+  REAL, INTENT(IN)    :: varmiss
+  REAL, INTENT(IN)    :: vmedlim
+  REAL, INTENT(IN)    :: dazlim
+  INTEGER, INTENT(IN) :: iorder
+
+  INTEGER, INTENT(IN) :: kntgate(maxazim,maxelev)
+  INTEGER, INTENT(IN) :: kntazim(maxelev)
+  INTEGER, INTENT(IN) :: kntelev
+
+  REAL, INTENT(IN)    :: rdrlat
+  REAL, INTENT(IN)    :: rdrlon
+  REAL, INTENT(IN)    :: radarx
+  REAL, INTENT(IN)    :: radary
+  REAL, INTENT(IN)    :: rdralt
+  REAL, INTENT(IN)    :: dazim
+  REAL, INTENT(IN)    :: rngmin
+  REAL, INTENT(IN)    :: rngmax
+
+  REAL, INTENT(IN)    :: rngvol(maxgate,maxelev)
+  REAL, INTENT(IN)    :: azmvol(maxazim,maxelev)
+  REAL, INTENT(IN)    :: elvvol(maxazim,maxelev)
+  REAL, INTENT(IN)    :: varvol(maxgate,maxazim,maxelev)
+  REAL, INTENT(OUT)   :: rxvol(maxgate,maxazim,maxelev)
+  REAL, INTENT(OUT)   :: ryvol(maxgate,maxazim,maxelev)
+
+  REAL, INTENT(IN)    :: xs(nx)
+  REAL, INTENT(IN)    :: ys(ny)
+  REAL, INTENT(IN)    :: zsnd(nzsnd)
+  REAL, INTENT(IN)    :: rfrsnd(nzsnd)
+  REAL, INTENT(OUT)   :: gridvar(nx,ny)
+
+  INTEGER, INTENT(OUT) :: istatus
+!
+!-----------------------------------------------------------------------
+!
+! Misc. Local Variables
+!
+!-----------------------------------------------------------------------
+!
+  INTEGER, PARAMETER :: n = 6
+  REAL :: avar(n,n)
+  REAL :: rhsvar(n)
+  REAL :: avel(n,n)
+  REAL :: rhsvel(n)
+  REAL :: sol(n)
+  REAL :: work(n,n+1)
+  REAL :: work1d(n+1)
+
+  REAL :: array(3,3)
+  REAL :: rhsv(3)
+  REAL :: solv(3)
+
+  REAL, PARAMETER :: eps = 1.0E-25
+
+  INTEGER :: ii,jj,kk,i,j,k,knt,kinbox
+  INTEGER :: kok,isort,jsort,mid
+  INTEGER :: kbgn,kend
+  INTEGER :: igate,jazim,jazmin,jmirror,jend
+  INTEGER :: istatal,istatwrt
+
+  INTEGER, PARAMETER :: maxsort = 5000
+
+  REAL :: deg2rad,rad2deg
+  REAL :: delx,dely,delz,dazimr,daz,azdiff
+  REAL :: ddx,ddxy,ddx2,ddy,ddy2,dxthr,dxthr0
+  REAL :: azmrot,xcomp,ycomp,mapfct,sfcr,zagl
+  REAL :: sum,sum2,sdev,thresh,slrange,elijk,azimijk,time
+  REAL :: varmax,varmin,varavg,varmean,varmed
+
+  REAL, ALLOCATABLE :: varsort(:)
+!
+!-----------------------------------------------------------------------
+!
+! Include files:
+!
+!-----------------------------------------------------------------------
+
+  CHARACTER (LEN=80  ) :: runname  ! Name of this run
+  INTEGER :: lfnkey
+  CHARACTER (LEN=80 ) :: dirname  ! The name of output directory
+
+  kk=1
+  deg2rad = atan(1.)/45.
+  rad2deg = 1./deg2rad
+  dazimr = dazim*deg2rad
+  dxthr0=0.6*max((xs(3)-xs(2)),(ys(3)-ys(2)))
+
+  allocate(varsort(maxsort),stat=istatal)
+
+  time=0.
+  delz=0.
+!
+  DO j=1,ny
+    DO i=1,nx
+      gridvar(i,j)=varmiss
+    END DO
+  END DO
+!
+  write(*,*) kntazim(kk), kntgate(kntazim(kk),kk)
+  DO jazim=1,kntazim(kk)
+    xcomp=sin(deg2rad*azmvol(jazim,kk))
+    ycomp=cos(deg2rad*azmvol(jazim,kk))
+
+    DO igate=1,kntgate(jazim,kk)
+      CALL beamhgt(elvvol(jazim,kk),rngvol(igate,kk),zagl,sfcr)
+             
+      rxvol(igate,jazim,kk)=radarx+xcomp*sfcr
+      ryvol(igate,jazim,kk)=radary+ycomp*sfcr
+    END DO
+  END DO
+!
+  DO j=1,ny-1
+    if(ys(j)> rngmax) cycle
+    DO i=1,nx-1
+      kok=0
+      sum=0.
+      sum2=0.
+      sdev=0.
+      varavg=999999.
+      varsort=999999.
+      delx=xs(i)-radarx
+      dely=ys(j)-radary
+      slrange=sqrt(delx*delx+dely*dely+delz*delz)
+      dxthr=max(dxthr0,((slrange+dxthr0)*dazimr))
+      if(slrange> rngmax) cycle
+!
+      IF( slrange > 0. ) THEN
+!
+!-----------------------------------------------------------------------
+!
+! Determine azimuth to this grid cell
+!
+!-----------------------------------------------------------------------
+!
+        IF(delx == 0.) THEN
+          IF(dely >= 0.) THEN
+            azimijk=0.
+          ELSE
+            azimijk=180.
+          END IF
+        ELSE
+          azimijk=rad2deg*atan(delx/dely)
+          IF(dely < 0.) azimijk=azimijk+180.
+          IF(azimijk < 0.) azimijk=azimijk+360.
+        END IF
+!
+        varmax=-999.
+        varmin=999.
+        DO jj=1,n
+          DO ii=1,n
+            avar(ii,jj)=0.
+          END DO
+        END DO 
+!
+        DO ii=1,n
+          rhsvar(ii)=0.
+        END DO
+!
+!-----------------------------------------------------------------------
+!
+!  Find nearest azimuth at this level
+!
+!-----------------------------------------------------------------------
+!
+        azdiff=181.
+        jazmin=1
+        DO jazim=1,kntazim(kk)
+          daz=azmvol(jazim,kk)-azimijk
+          IF(daz > 180.) daz=daz-360.
+          IF(daz < -180.) daz=daz+360.
+          daz=abs(daz)
+          IF(daz < azdiff) THEN
+            azdiff=daz
+            jazmin=jazim
+          END IF
+        END DO
+
+        jmirror=jazmin+(kntazim(kk)/2)
+        IF(jmirror > kntazim(kk)) jmirror=jmirror-kntazim(kk)
+!
+!-----------------------------------------------------------------------
+!
+!  First pass, find median, avg, std dev.
+!
+!
+!  Loop forward from jazmin
+!
+!-----------------------------------------------------------------------
+!
+        jend=kntazim(kk)
+        IF(jmirror > jazmin) jend=jmirror-1
+        
+        DO jazim=jazmin,jend
+          kinbox=0
+          daz=azmvol(jazim,kk)-azimijk
+          IF(daz > 180.) daz=daz-360.
+          IF(daz < -180.) daz=daz+360.
+          IF(abs(daz) > dazlim) EXIT
+          DO igate=1,kntgate(jazim,kk)
+            ddx=rxvol(igate,jazim,kk)-xs(i)
+            ddy=ryvol(igate,jazim,kk)-ys(j)
+!
+            IF( rngvol(igate,kk) > rngmin .AND.                    &
+                rngvol(igate,kk) < rngmax .AND.                    &
+                abs(ddx) < dxthr .AND. abs(ddy) < dxthr ) THEN
+              kinbox=kinbox+1
+              !write(*,*) igate,jazim,kk
+              IF(abs(varvol(igate,jazim,kk)) < abs(varchek) ) THEN
+                DO isort=1,kok
+                  IF(varvol(igate,jazim,kk) < varsort(isort)) EXIT
+                END DO
+                IF(kok < maxsort) THEN
+                  DO jsort=kok,isort,-1
+                    varsort(jsort+1)=varsort(jsort)
+                  END DO
+                  varsort(isort)=varvol(igate,jazim,kk)
+                  sum=sum+varvol(igate,jazim,kk)
+                  sum2=sum2+(varvol(igate,jazim,kk)*varvol(igate,jazim,kk))
+                  kok=kok+1
+                ELSE
+                  EXIT
+                END IF
+              END IF   ! data ok
+            END IF  ! inside box
+          END DO ! igate
+          IF(kinbox == 0 .OR. kok == maxsort) EXIT
+        END DO ! jazim
+!
+!-----------------------------------------------------------------------
+!
+!  IF kinbox > 0 continue from jazim=1
+!
+!-----------------------------------------------------------------------
+!
+        IF(kinbox > 0 .and. jend==kntazim(kk)) THEN
+          DO jazim=1,jmirror-1
+            kinbox=0
+            daz=azmvol(jazim,kk)-azimijk
+            IF(daz > 180.) daz=daz-360.
+            IF(daz < -180.) daz=daz+360.
+            IF(abs(daz) > dazlim) EXIT
+            DO igate=1,kntgate(jazim,kk)
+!
+              ddx=rxvol(igate,jazim,kk)-xs(i)
+              ddy=ryvol(igate,jazim,kk)-ys(j)
+
+              IF( rngvol(igate,kk) > rngmin .AND.                    &
+                  rngvol(igate,kk) < rngmax .AND.                    &
+                      abs(ddx) < dxthr .AND. abs(ddy) < dxthr ) THEN
+                IF(abs(varvol(igate,jazim,kk)) < abs(varchek) ) THEN
+                  IF(kok < maxsort) THEN
+                    DO isort=1,kok
+                      IF(varvol(igate,jazim,kk) < varsort(isort)) EXIT
+                    END DO
+                    DO jsort=kok,isort,-1
+                      varsort(jsort+1)=varsort(jsort)
+                    END DO
+                    varsort(isort)=varvol(igate,jazim,kk)
+                    sum=sum+varvol(igate,jazim,kk)
+                    sum2=sum2+(varvol(igate,jazim,kk)*varvol(igate,jazim,kk))
+                    kok=kok+1
+                  ELSE
+                    EXIT
+                  END IF
+                END IF
+              END IF
+            END DO
+            IF(kinbox == 0 .OR. kok == maxsort) EXIT
+          END DO
+        END IF
+!
+!-----------------------------------------------------------------------
+!
+! Loop backward from jazmin
+!
+!-----------------------------------------------------------------------
+!
+        jend= 1
+        IF(jmirror < jazmin) jend=jmirror
+        DO jazim=jazmin-1,jend,-1
+          kinbox=0
+          daz=azmvol(jazim,kk)-azimijk
+          IF(daz > 180.) daz=daz-360.
+          IF(daz < -180.) daz=daz+360.
+          IF(abs(daz) > dazlim) EXIT
+          DO igate=1,kntgate(jazim,kk)
+!
+            ddx=rxvol(igate,jazim,kk)-xs(i)
+            ddy=ryvol(igate,jazim,kk)-ys(j)
+
+            IF( rngvol(igate,kk) > rngmin .AND.                    &
+                rngvol(igate,kk) < rngmax .AND.                    &
+                      abs(ddx) < dxthr .AND. abs(ddy) < dxthr ) THEN
+
+              kinbox=kinbox+1
+
+              IF(abs(varvol(igate,jazim,kk)) < abs(varchek) ) THEN
+                IF(kok < maxsort) THEN
+                  DO isort=1,kok
+                    IF(varvol(igate,jazim,kk) < varsort(isort)) EXIT
+                  END DO
+                  DO jsort=kok,isort,-1
+                    varsort(jsort+1)=varsort(jsort)
+                  END DO
+                  varsort(isort)=varvol(igate,jazim,kk)
+                  sum=sum+varvol(igate,jazim,kk)
+                  sum2=sum2+(varvol(igate,jazim,kk)*varvol(igate,jazim,kk))
+                  kok=kok+1
+                ELSE
+                  EXIT
+                END IF
+              END IF
+            END IF
+          END DO
+          IF(kinbox == 0 .OR. kok == maxsort) EXIT
+        END DO
+!
+!-----------------------------------------------------------------------
+!
+! If not yet outside box, continue from last radial.
+!
+!-----------------------------------------------------------------------
+!
+        IF(kinbox > 0 .and. jend==1 ) THEN
+          DO jazim=kntazim(kk),jmirror,-1
+            kinbox=0
+            daz=azmvol(jazim,kk)-azimijk
+            IF(daz > 180.) daz=daz-360.
+            IF(daz < -180.) daz=daz+360.
+            IF(abs(daz) > dazlim) EXIT
+            DO igate=1,kntgate(jazim,kk)
+!
+              ddx=rxvol(igate,jazim,kk)-xs(i)
+              ddy=ryvol(igate,jazim,kk)-ys(j)
 ! 
-!   ctlfile=trim(filename)//".data.ctl"
-!   datfile=trim(filename)//".data.dat"
-!   mapfile=trim(filename)//".data.map"
+              IF( rngvol(igate,kk) > rngmin .AND.                    &
+                  rngvol(igate,kk) < rngmax .AND.                    &
+                      abs(ddx) < dxthr .AND. abs(ddy) < dxthr ) THEN
+                kinbox=kinbox+1
+                IF(abs(varvol(igate,jazim,kk)) < abs(varchek) ) THEN
+                  IF(kok < maxsort ) THEN
+                    DO isort=1,kok
+                      IF(varvol(igate,jazim,kk) < varsort(isort)) EXIT
+                    END DO
+                    DO jsort=kok,isort,-1
+                      varsort(jsort+1)=varsort(jsort)
+                    END DO
+                    varsort(isort)=varvol(igate,jazim,kk)
+                    sum=sum+varvol(igate,jazim,kk)
+                    sum2=sum2+(varvol(igate,jazim,kk)*varvol(igate,jazim,kk))
+                    kok=kok+1
+                  ELSE
+                    EXIT
+                  END IF
+                END IF
+              END IF
+            END DO  ! igate
+            IF(kinbox == 0 .OR. kok == maxsort) EXIT
+          END DO ! jazim
+        END IF
 !
-!   open(radar_unit,file=ctlfile,status="unknown")
-!   write(radar_unit,"(A       )") "DSET ^"//trim(datfile)
-!   write(radar_unit,"(A       )") "DTYPE station"
-!   write(radar_unit,"(A       )") "OPTIONS big_endian"
-!   write(radar_unit,"(A       )") "STNMAP "//trim(mapfile)
-!   write(radar_unit,"(A,F12.1 )") "UNDEF ", miss
-!   write(radar_unit,"(A       )") "TITLE  Station Data Sample"
-!   write(radar_unit,"(A       )") "TDEF   1 linear 00z01jan2000 1hr"
-!   write(radar_unit,"(A       )") "VARS 5"
-!   write(radar_unit,"(A,I4,A  )") "h    ",NLEV,"  99  Height           (m)  "
-!   write(radar_unit,"(A,I4,A  )") "z    ",NLEV,"  99  Reflectivity     (dB) "
-!   write(radar_unit,"(A,I4,A  )") "rv   ",NLEV,"  99  Radical Velocity (m/s)"
-!   write(radar_unit,"(A,I4,A  )") "u    ",NLEV,"  99  U-Wind           (m/s)"
-!   write(radar_unit,"(A,I4,A  )") "v    ",NLEV,"  99  V-Wind           (m/s)"
-!   write(radar_unit,"(A       )") "ENDVARS"
-!   close(radar_unit)
+        mid=(kok/2)+1
+        varmed=varsort(mid)
+        IF(kok > 0) varavg=sum/float(kok)
+        IF ( kok > 1 )                                               &
+          sdev=sqrt((sum2-(sum*sum/float(kok)))/float(kok-1))
+        thresh=max((2.*sdev),vmedlim)
 !
-!   open(radar_unit,file=datfile,recordtype="stream",form="unformatted",status="unknown")
-!   TIM = 0.0
-!   NFLAG = 0 ! If surface variables present.
+!-----------------------------------------------------------------------
 !
-!   do n=1, nradar
-!      do i=1, radar(n)%npoint
-!         ref=miss
-!         vel=miss
-!         hgt=miss
-!         write(STID,'(I3,I5)') n,i
-!         write(radar_unit) STID,radar(n)%point(i)%lat, radar(n)%point(i)%lon,TIM,NLEV,NFLAG
-!         do k=1, radar(n)%point(i)%nlev
-!            ref(k)=radar(n)%point(i)%ref(k)
-!            vel(k)=radar(n)%point(i)%vel(k)
-!            hgt(k)=radar(n)%point(i)%hgt(k)
-!         enddo
-!         do k=1, NLEV
-!            level=k
-!            !write(*,"(F6.0,5F12.1)") level,hgt(k),ref(k),vel(k),radar(n)%point(i)%u,radar(n)%point(i)%v
+!  Process data for local quadratic fit
 !
-!            write(radar_unit) level,hgt(k),ref(k),vel(k), &
-!                              vel(k)*radar(n)%point(i)%u, &
-!                              vel(k)*radar(n)%point(i)%v
-!         enddo
-!      enddo
-!   enddo
-!   NLEV = 0
-!   WRITE(radar_unit) STID,0.,0.,TIM,NLEV,NFLAG
-!   close(radar_unit)
+!-----------------------------------------------------------------------
 !
-!   end subroutine
+!
+!-----------------------------------------------------------------------
+!
+!  Find nearest azimuth at this level
+!
+!-----------------------------------------------------------------------
+!
+        azdiff=181.
+        jazmin=1
+        DO jazim=1,kntazim(kk)
+          daz=azmvol(jazim,kk)-azimijk
+          IF(daz > 180.) daz=daz-360.
+          IF(daz < -180.) daz=daz+360.
+          daz=abs(daz)
+          IF(daz < azdiff) THEN
+            azdiff=daz
+            jazmin=jazim
+          END IF
+        END DO
+             
+        jmirror=jazmin+(kntazim(kk)/2)
+        IF(jmirror > kntazim(kk)) jmirror=jmirror-kntazim(kk)
+!
+!-----------------------------------------------------------------------
+!
+!  Loop forward from jazmin
+!
+!-----------------------------------------------------------------------
+!
+        jend=kntazim(kk)
+        IF(jmirror > jazmin) jend=jmirror-1
+        DO jazim=jazmin,jend
+          kinbox=0
+          daz=azmvol(jazim,kk)-azimijk
+          IF(daz > 180.) daz=daz-360.
+          IF(daz < -180.) daz=daz+360.
+          IF(abs(daz) > dazlim) EXIT
+          DO igate=1,kntgate(jazim,kk)
+!
+            ddx=rxvol(igate,jazim,kk)-xs(i)
+            ddy=ryvol(igate,jazim,kk)-ys(j)
+! 
+            IF( rngvol(igate,kk) > rngmin .AND.                    &
+                rngvol(igate,kk) < rngmax .AND.                    &
+                      abs(ddx) < dxthr .AND. abs(ddy) < dxthr ) THEN
 
-end module
+              kinbox=kinbox+1
+              ddxy=ddx*ddy
+              ddx2=ddx*ddx
+              ddy2=ddy*ddy
+
+              IF(abs(varvol(igate,jazim,kk)) < abs(varchek) .AND.  &
+                 abs(varvol(igate,jazim,kk)-varmed) < thresh ) THEN
+!
+                 if(varvol(igate,jazim,kk)>varmax)then
+                    !write(701,*)"varmax",igate,jazim,kk,varvol(igate,jazim,kk),varmax
+                 endif
+                 varmax=max(varmax,varvol(igate,jazim,kk))
+                 if(varvol(igate,jazim,kk)<varmin)then
+                    !write(701,*)"varmin",igate,jazim,kk,varvol(igate,jazim,kk),varmin
+                 endif
+                 varmin=min(varmin,varvol(igate,jazim,kk))
+                 
+!
+                 rhsvar(1)=rhsvar(1)+varvol(igate,jazim,kk)
+                 rhsvar(2)=rhsvar(2)+varvol(igate,jazim,kk)*ddx
+                 rhsvar(3)=rhsvar(3)+varvol(igate,jazim,kk)*ddy
+                 rhsvar(4)=rhsvar(4)+varvol(igate,jazim,kk)*ddxy
+                 rhsvar(5)=rhsvar(5)+varvol(igate,jazim,kk)*ddx2
+                 rhsvar(6)=rhsvar(6)+varvol(igate,jazim,kk)*ddy2
+!
+                 avar(1,1)=avar(1,1)+1.
+                 avar(1,2)=avar(1,2)+ddx
+                 avar(1,3)=avar(1,3)+ddy
+                 avar(1,4)=avar(1,4)+ddxy
+                 avar(1,5)=avar(1,5)+ddx2
+                 avar(1,6)=avar(1,6)+ddy2
+!
+                 avar(2,1)=avar(2,1)+ddx
+                 avar(2,2)=avar(2,2)+ddx2
+                 avar(2,3)=avar(2,3)+ddx*ddy
+                 avar(2,4)=avar(2,4)+ddx*ddxy
+                 avar(2,5)=avar(2,5)+ddx*ddx2
+                 avar(2,6)=avar(2,6)+ddx*ddy2
+!
+                 avar(3,1)=avar(3,1)+ddy 
+                 avar(3,2)=avar(3,2)+ddy*ddx
+                 avar(3,3)=avar(3,3)+ddy2
+                 avar(3,4)=avar(3,4)+ddy*ddx2
+                 avar(3,5)=avar(3,5)+ddy*ddx2
+                 avar(3,6)=avar(3,6)+ddy*ddy2
+!
+                 avar(4,1)=avar(4,1)+ddxy
+                 avar(4,2)=avar(4,2)+ddxy*ddx
+                 avar(4,3)=avar(4,3)+ddxy*ddy
+                 avar(4,4)=avar(4,4)+ddxy*ddxy
+                 avar(4,5)=avar(4,5)+ddxy*ddx2
+                 avar(4,6)=avar(4,6)+ddxy*ddy2
+!
+                 avar(5,1)=avar(5,1)+ddx2
+                 avar(5,2)=avar(5,2)+ddx2*ddx
+                 avar(5,3)=avar(5,3)+ddx2*ddy
+                 avar(5,4)=avar(5,4)+ddx2*ddxy
+                 avar(5,5)=avar(5,5)+ddx2*ddx2
+                 avar(5,6)=avar(5,6)+ddx2*ddy2
+!
+                 avar(6,1)=avar(6,1)+ddy2 
+                 avar(6,2)=avar(6,2)+ddy2*ddx
+                 avar(6,3)=avar(6,3)+ddy2*ddy
+                 avar(6,4)=avar(6,4)+ddy2*ddxy
+                 avar(6,5)=avar(6,5)+ddy2*ddx2
+                 avar(6,6)=avar(6,6)+ddy2*ddy2
+!
+               END IF
+!
+             END IF
+           END DO  ! igate
+           IF(kinbox == 0) EXIT
+         END DO ! jazim
+!
+!-----------------------------------------------------------------------
+!
+!  IF kinbox > 0 continue from jazim=1
+!
+!-----------------------------------------------------------------------
+!
+         IF(kinbox > 0 .and. jend==kntazim(kk)) THEN
+           DO jazim=1,jmirror-1
+             kinbox=0
+             daz=azmvol(jazim,kk)-azimijk
+             IF(daz > 180.) daz=daz-360.
+             IF(daz < -180.) daz=daz+360.
+             IF(abs(daz) > dazlim) EXIT
+             DO igate=1,kntgate(jazim,kk)
+!
+               ddx=rxvol(igate,jazim,kk)-xs(i)
+               ddy=ryvol(igate,jazim,kk)-ys(j)
+!
+               IF( rngvol(igate,kk) > rngmin .AND.                    &
+                      rngvol(igate,kk) < rngmax .AND.                    &
+                      abs(ddx) < dxthr .AND. abs(ddy) < dxthr ) THEN
+
+                 kinbox=kinbox+1
+                 ddxy=ddx*ddy
+                 ddx2=ddx*ddx
+                 ddy2=ddy*ddy
+
+                 IF(abs(varvol(igate,jazim,kk)) < abs(varchek) .AND.             &
+                    abs(varvol(igate,jazim,kk)-varmed) < thresh ) THEN
+!
+                 if(varvol(igate,jazim,kk)>varmax)then
+                    !write(701,*)"varmax",igate,jazim,kk,varvol(igate,jazim,kk),varmax
+                 endif
+                   varmax=max(varmax,varvol(igate,jazim,kk))
+                 if(varvol(igate,jazim,kk)<varmin)then
+                    !write(701,*)"varmin",igate,jazim,kk,varvol(igate,jazim,kk),varmin
+                 endif
+                   varmin=min(varmin,varvol(igate,jazim,kk))
+!
+                   rhsvar(1)=rhsvar(1)+varvol(igate,jazim,kk)
+                   rhsvar(2)=rhsvar(2)+varvol(igate,jazim,kk)*ddx
+                   rhsvar(3)=rhsvar(3)+varvol(igate,jazim,kk)*ddy
+                   rhsvar(4)=rhsvar(4)+varvol(igate,jazim,kk)*ddxy
+                   rhsvar(5)=rhsvar(5)+varvol(igate,jazim,kk)*ddx2
+                   rhsvar(6)=rhsvar(6)+varvol(igate,jazim,kk)*ddy2
+!
+                   avar(1,1)=avar(1,1)+1.
+                   avar(1,2)=avar(1,2)+ddx
+                   avar(1,3)=avar(1,3)+ddy
+                   avar(1,4)=avar(1,4)+ddxy
+                   avar(1,5)=avar(1,5)+ddx2
+                   avar(1,6)=avar(1,6)+ddy2
+!
+                   avar(2,1)=avar(2,1)+ddx
+                   avar(2,2)=avar(2,2)+ddx2
+                   avar(2,3)=avar(2,3)+ddx*ddy
+                   avar(2,4)=avar(2,4)+ddx*ddxy
+                   avar(2,5)=avar(2,5)+ddx*ddx2
+                   avar(2,6)=avar(2,6)+ddx*ddy2
+!
+                   avar(3,1)=avar(3,1)+ddy 
+                   avar(3,2)=avar(3,2)+ddy*ddx
+                   avar(3,3)=avar(3,3)+ddy2
+                   avar(3,4)=avar(3,4)+ddy*ddxy
+                   avar(3,5)=avar(3,5)+ddy*ddx2
+                   avar(3,6)=avar(3,6)+ddy*ddy2
+!
+                   avar(5,1)=avar(5,1)+ddxy
+                   avar(5,2)=avar(5,2)+ddxy*ddx
+                   avar(5,3)=avar(5,3)+ddxy*ddy
+                   avar(5,4)=avar(5,4)+ddxy*ddxy
+                   avar(5,5)=avar(5,5)+ddxy*ddx2
+                   avar(5,6)=avar(5,6)+ddxy*ddy2
+
+                   avar(6,1)=avar(6,1)+ddx2
+                   avar(6,2)=avar(6,2)+ddx2*ddx
+                   avar(6,3)=avar(6,3)+ddx2*ddy
+                   avar(6,4)=avar(6,4)+ddx2*ddxy
+                   avar(6,5)=avar(6,5)+ddx2*ddx2
+                   avar(6,6)=avar(6,6)+ddx2*ddy2
+!
+                 END IF
+!
+               END IF
+             END DO  ! igate
+             IF(kinbox == 0) EXIT
+           END DO ! jazim
+         END IF
+!
+!-----------------------------------------------------------------------
+!
+! Loop backward from jazmin
+!
+!-----------------------------------------------------------------------
+!
+         jend= 1
+         IF(jmirror < jazmin) jend=jmirror
+         DO jazim=jazmin-1,jend,-1
+           kinbox=0
+           daz=azmvol(jazim,kk)-azimijk
+           IF(daz > 180.) daz=daz-360.
+           IF(daz < -180.) daz=daz+360.
+           IF(abs(daz) > dazlim) EXIT
+           DO igate=1,kntgate(jazim,kk)
+!
+             ddx=rxvol(igate,jazim,kk)-xs(i)
+             ddy=ryvol(igate,jazim,kk)-ys(j)
+!
+             IF( rngvol(igate,kk) > rngmin .AND.                    &
+                 rngvol(igate,kk) < rngmax .AND.                    &
+                 abs(ddx) < dxthr .AND. abs(ddy) < dxthr ) THEN
+
+               kinbox=kinbox+1
+               ddxy=ddx*ddy
+               ddx2=ddx*ddx
+               ddy2=ddy*ddy
+
+               IF(abs(varvol(igate,jazim,kk)) < abs(varchek) .AND.             &
+                  abs(varvol(igate,jazim,kk)-varmed) < thresh ) THEN
+!
+                 if(varvol(igate,jazim,kk)>varmax)then
+                    !write(701,*)"varmax",igate,jazim,kk,varvol(igate,jazim,kk),varmax
+                 endif
+                 varmax=max(varmax,varvol(igate,jazim,kk))
+                 if(varvol(igate,jazim,kk)<varmin)then
+                    !write(701,*)"varmin",igate,jazim,kk,varvol(igate,jazim,kk),varmin
+                 endif
+                 varmin=min(varmin,varvol(igate,jazim,kk))
+!
+                 rhsvar(1)=rhsvar(1)+varvol(igate,jazim,kk)
+                 rhsvar(2)=rhsvar(2)+varvol(igate,jazim,kk)*ddx
+                 rhsvar(3)=rhsvar(3)+varvol(igate,jazim,kk)*ddy
+                 rhsvar(4)=rhsvar(4)+varvol(igate,jazim,kk)*ddxy
+                 rhsvar(5)=rhsvar(5)+varvol(igate,jazim,kk)*ddx2
+                 rhsvar(6)=rhsvar(6)+varvol(igate,jazim,kk)*ddy2
+!
+                 avar(1,1)=avar(1,1)+1.
+                 avar(1,2)=avar(1,2)+ddx
+                 avar(1,3)=avar(1,3)+ddy
+                 avar(1,4)=avar(1,4)+ddxy
+                 avar(1,5)=avar(1,5)+ddx2
+                 avar(1,6)=avar(1,6)+ddy2
+!
+                 avar(2,1)=avar(2,1)+ddx
+                 avar(2,2)=avar(2,2)+ddx2
+                 avar(2,3)=avar(2,3)+ddx*ddy
+                 avar(2,4)=avar(2,4)+ddx*ddxy
+                 avar(2,5)=avar(2,5)+ddx*ddx2
+                 avar(2,6)=avar(2,6)+ddx*ddy2
+!
+                 avar(3,1)=avar(3,1)+ddy 
+                 avar(3,2)=avar(3,2)+ddy*ddx
+                 avar(3,3)=avar(3,3)+ddy2
+                 avar(3,4)=avar(3,4)+ddy*ddxy
+                 avar(3,5)=avar(3,5)+ddy*ddx2
+                 avar(3,6)=avar(3,6)+ddy*ddy2
+!
+                 avar(4,1)=avar(4,1)+ddxy
+                 avar(4,2)=avar(4,2)+ddxy*ddx
+                 avar(4,3)=avar(4,3)+ddxy*ddy
+                 avar(4,4)=avar(4,4)+ddxy*ddxy
+                 avar(4,5)=avar(4,5)+ddxy*ddx2
+                 avar(4,6)=avar(4,6)+ddxy*ddy2
+!
+                 avar(5,1)=avar(5,1)+ddx2
+                 avar(5,2)=avar(5,2)+ddx2*ddx
+                 avar(5,3)=avar(5,3)+ddx2*ddy
+                 avar(5,4)=avar(5,4)+ddx2*ddxy
+                 avar(5,5)=avar(5,5)+ddx2*ddx2
+                 avar(5,6)=avar(5,6)+ddx2*ddy2
+!
+                 avar(6,1)=avar(6,1)+ddy2 
+                 avar(6,2)=avar(6,2)+ddy2*ddx
+                 avar(6,3)=avar(6,3)+ddy2*ddy
+                 avar(6,4)=avar(6,4)+ddy2*ddxy
+                 avar(6,5)=avar(6,5)+ddy2*ddx2
+                 avar(6,6)=avar(6,6)+ddy2*ddy2
+!
+               END IF
+!
+             END IF
+           END DO  ! igate
+           IF(kinbox == 0) EXIT
+         END DO ! jazim
+!
+!-----------------------------------------------------------------------
+!
+! If not yet outside box, continue from last radial.
+!
+!-----------------------------------------------------------------------
+!
+         IF(kinbox > 0 .and. jend==1 ) THEN
+         DO jazim=kntazim(kk),jmirror,-1
+           kinbox=0
+           daz=azmvol(jazim,kk)-azimijk
+           IF(daz > 180.) daz=daz-360.
+           IF(daz < -180.) daz=daz+360.
+           IF(abs(daz) > dazlim) EXIT
+           DO igate=1,kntgate(jazim,kk)
+!
+             ddx=rxvol(igate,jazim,kk)-xs(i)
+             ddy=ryvol(igate,jazim,kk)-ys(j)
+!
+             IF( rngvol(igate,kk) > rngmin .AND.                    &
+                 rngvol(igate,kk) < rngmax .AND.                    &
+                 abs(ddx) < dxthr .AND. abs(ddy) < dxthr ) THEN
+
+               kinbox=kinbox+1
+               ddxy=ddx*ddy
+               ddx2=ddx*ddx
+               ddy2=ddy*ddy
+
+               IF(abs(varvol(igate,jazim,kk)) < abs(varchek) .AND.             &
+                  abs(varvol(igate,jazim,kk)-varmed) < thresh ) THEN
+!
+                 if(varvol(igate,jazim,kk)>varmax)then
+                    !write(701,*)"varmax",igate,jazim,kk,varvol(igate,jazim,kk),varmax
+                 endif
+                  varmax=max(varmax,varvol(igate,jazim,kk))
+                 if(varvol(igate,jazim,kk)<varmin)then
+                    !write(701,*)"varmin",igate,jazim,kk,varvol(igate,jazim,kk),varmin
+                 endif
+                  varmin=min(varmin,varvol(igate,jazim,kk))
+!
+                  rhsvar(1)=rhsvar(1)+varvol(igate,jazim,kk)
+                  rhsvar(2)=rhsvar(2)+varvol(igate,jazim,kk)*ddx
+                  rhsvar(3)=rhsvar(3)+varvol(igate,jazim,kk)*ddy
+                  rhsvar(4)=rhsvar(4)+varvol(igate,jazim,kk)*ddxy
+                  rhsvar(5)=rhsvar(5)+varvol(igate,jazim,kk)*ddx2
+                  rhsvar(6)=rhsvar(6)+varvol(igate,jazim,kk)*ddy2
+!
+                  avar(1,1)=avar(1,1)+1.
+                  avar(1,2)=avar(1,2)+ddx
+                  avar(1,3)=avar(1,3)+ddy
+                  avar(1,4)=avar(1,4)+ddxy
+                  avar(1,5)=avar(1,5)+ddx2
+                  avar(1,6)=avar(1,6)+ddy2
+!
+                  avar(2,1)=avar(2,1)+ddx
+                  avar(2,2)=avar(2,2)+ddx2
+                  avar(2,3)=avar(2,3)+ddx*ddy
+                  avar(2,4)=avar(2,4)+ddx*ddxy
+                  avar(2,5)=avar(2,5)+ddx*ddx2
+                  avar(2,6)=avar(2,6)+ddx*ddy2
+!
+                  avar(3,1)=avar(3,1)+ddy 
+                  avar(3,2)=avar(3,2)+ddy*ddx
+                  avar(3,3)=avar(3,3)+ddy2
+                  avar(3,4)=avar(3,4)+ddy*ddxy
+                  avar(3,5)=avar(3,5)+ddy*ddx2
+                  avar(3,6)=avar(3,6)+ddy*ddy2
+!
+                  avar(5,1)=avar(5,1)+ddx2
+                  avar(5,2)=avar(5,2)+ddx2*ddx
+                  avar(5,3)=avar(5,3)+ddx2*ddy
+                  avar(5,4)=avar(5,4)+ddx2*ddxy
+                  avar(5,5)=avar(5,5)+ddx2*ddx2
+                  avar(5,6)=avar(5,6)+ddx2*ddy2
+!
+                  avar(6,1)=avar(6,1)+ddx2
+                  avar(6,2)=avar(6,2)+ddx2*ddx
+                  avar(6,3)=avar(6,3)+ddx2*ddy
+                  avar(6,4)=avar(6,4)+ddx2*ddxy
+                  avar(6,5)=avar(6,5)+ddx2*ddx2
+                  avar(6,6)=avar(6,6)+ddx2*ddy2
+!
+                END IF
+ 
+              END IF
+            END DO  ! igate
+            IF(kinbox == 0) EXIT
+          END DO ! jazim
+        END IF
+!
+!-----------------------------------------------------------------------
+!
+!   Solve for variable at grid point
+!
+!-----------------------------------------------------------------------
+!
+        knt=nint(avar(1,1))
+        if(varmin>=999.)then
+            gridvar(i,j)=varmiss
+        else 
+        IF ( iorder > 1 .and. knt > 7 ) THEN          
+          varmean=rhsvar(1)/avar(1,1)
+          CALL GJELIM(n,avar,rhsvar,sol,work,work1d,eps,istatus)
+          gridvar(i,j)=min(varmax,max(varmin,sol(1)))
+          !if(abs(gridvar(i,j))>100)then
+             !write(701,*) "remap2d",avar,rhsvar,varmin,varmax,solv(1)
+             !stop
+          !endif
+        ELSE IF ( iorder > 0 .and. knt > 5 ) THEN
+          DO jj=1,3
+            DO ii=1,3
+              array(ii,jj)=avar(ii,jj)
+            END DO
+          END DO
+          DO ii=1,3
+            rhsv(ii)=rhsvar(ii)
+          END DO
+          CALL GJELIM(3,array,rhsv,solv,work,work1d,eps,istatus)
+          gridvar(i,j)=min(varmax,max(varmin,solv(1)))
+          !if(abs(gridvar(i,j))>100)then
+             !write(701,*) "remap2d",array,rhsv,varmin,varmax,solv(1)
+             !stop
+          !endif
+        ELSE IF ( knt > 0 ) THEN
+          !varmean=rhsvar(1)/avar(1,1)
+          !gridvar(i,j)=varmean
+          gridvar(i,j)=varmiss
+        END IF
+        endif
+
+      END IF
+
+    END DO   ! i loop
+  END DO   ! j loop
+
+  deallocate(varsort,stat=istatal)
+
+  RETURN
+  END SUBROUTINE remap2d
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+end module 
