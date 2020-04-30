@@ -1,5 +1,4 @@
 module radar_region
-use grd
 implicit none
 
 private
@@ -105,6 +104,7 @@ contains
 
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
    subroutine init_grid(num_range, num_azim, azim, dr, vel, ref, spw, vmax, grid)
+   use grd, only: write_grd, write_test_data 
    implicit none
 
    integer,                                   intent(in) :: num_range, num_azim
@@ -238,7 +238,7 @@ contains
       enddo
    enddo
    call write_test_data('flag.dat',num_range,num_azim,azim,dr,grid%flag,flag_pt_unknown)
-   call write_grd_int  ('flag.grd',num_range,num_azim,grid%flag,flag_pt_unknown)
+   call write_grd      ('flag.grd',num_range,num_azim,grid%flag,flag_pt_unknown)
    end subroutine
 
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
@@ -254,6 +254,7 @@ contains
 
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
    subroutine create_region(grid, num_region, region)
+   use grd, only: write_grd, write_test_data
    implicit none
 
    type(t_grid  ),                            intent(inout) :: grid
@@ -334,7 +335,7 @@ contains
    enddo
    
    call write_test_data('level.dat',grid%num_range,grid%num_azim,grid%azim,grid%dr,grid%level,int(miss))
-   call write_grd_int  ('level.grd',grid%num_range,grid%num_azim,grid%level,int(miss))
+   call write_grd      ('level.grd',grid%num_range,grid%num_azim,grid%level,int(miss))
 
 !   write(*,*) "in create region:", c1
    write(*,*) "num valid:" , num_valid
@@ -419,6 +420,7 @@ contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine update_region(grid, num_region, region)
    use libradar, only: quick_sort
+   use grd, only: write_grd, write_test_data, region_name
    implicit none
    type(t_grid)  ,                        intent(inout) :: grid
    integer,                               intent(inout) :: num_region
@@ -683,6 +685,7 @@ region(:)%maxv=miss
 !   end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine check_stdmax(grid, num_region, region, num_cluster, cluster)
+   use grd, only: cluster_name, region_name, point_name
    implicit none
    type(t_grid),                            intent(inout) :: grid
    integer,                                 intent(in)    :: num_region, num_cluster
@@ -1102,6 +1105,7 @@ region(:)%maxv=miss
    end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine check_point(grid, num_region, region, vel, flag, i1, j1, i2, j2)
+   use grd, only: region_name, point_name
    implicit none
    type(t_grid),                          intent(inout) :: grid
    integer     ,                          intent(in)    :: num_region 
@@ -1210,6 +1214,7 @@ region(:)%maxv=miss
    end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    recursive subroutine delete_point_region(grid, i, j, flag)
+   use grd, only: region_name, point_name
    implicit none
    type(t_grid),            intent(inout) :: grid
    integer     ,            intent(in)    :: i, j
@@ -1430,6 +1435,7 @@ region(:)%maxv=miss
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine dealias_region(num_range,num_azim,vel,bkg_in,ref,spw,vmax,azim,elv,dr,miss_var,nyq_num,flag,vel_out,&
                              ci0,ci1,ci2,ci3,ci4,ci5,vi0,wi0,wi1,zi0,ri0,ri1,ai0,ai1,ait,ni0,ival,rval)
+   use grd, only: write_grd, write_grid_csv, get_filename, write_test_data, cluster_name, region_name, point_name
    implicit none
 
    integer,                                intent(in)  :: num_range, num_azim
@@ -1528,7 +1534,7 @@ region(:)%maxv=miss
    !endif
 
    !azim=0
-   call write_grd_real('obs.grd',num_range,num_azim,vel,miss)
+   call write_grd('obs.grd',num_range,num_azim,vel,miss)
 
    v0=vel0
    w0=spw0
@@ -1589,7 +1595,7 @@ region(:)%maxv=miss
 
    write(*,*) "create region..."
    call create_region(grid,num_region,region)
-   call write_grd_int  ('region.grd'     ,num_range,num_azim,grid%region,imiss)
+   call write_grd      ('region.grd'     ,num_range,num_azim,grid%region,imiss)
    call write_test_data('region.dat'     ,num_range,num_azim,azim,dr,grid%region,imiss)
    write(*,*) "num region after create:", num_region 
 
@@ -2011,7 +2017,7 @@ region(:)%maxv=miss
    !   enddo
    !enddo
    call write_test_data('set_num.dat',num_range,num_azim,azim,dr,grid%cluster,imiss)
-   call write_grd('set_num.grd',num_range,num_azim,grid%cluster,imiss)
+   call write_grd      ('set_num.grd',num_range,num_azim,grid%cluster,imiss)
 
    write(nyquist_unit,"(A)") "========== Final Region Nyquist Number =========="
    num_point_dealiased   =0
@@ -2151,9 +2157,9 @@ region(:)%maxv=miss
    flag=grid%flag
    call write_test_data('nyq_num.dat',num_range,num_azim,azim,dr,nyq_num,int(miss))
    !write(121) vel
-   call write_grd_real ('vel_new.grd',num_range,num_azim,vel_out,miss)
+   call write_grd      ('vel_new.grd',num_range,num_azim,vel_out,miss)
    !write(122) nyq_num 
-   call write_grd_int  ('nyq_num.grd',num_range,num_azim,nyq_num,int(miss))
+   call write_grd      ('nyq_num.grd',num_range,num_azim,nyq_num,int(miss))
    
    close(cluster_unit   )
    close(region_unit    )
@@ -2167,6 +2173,7 @@ region(:)%maxv=miss
    end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    recursive subroutine remove_region(rem_idx, num_region, region, if_delete)
+   use grd, only: region_name
    implicit none
    
    integer,                               intent(in)    :: rem_idx, num_region
@@ -2234,6 +2241,7 @@ region(:)%maxv=miss
    end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine check_nyquist_number(num_region, region, cluster, neighbor_idx, reg_idx, chk_idx)
+   use grd, only: region_name
    implicit none
    type(t_cluster),                       intent(in)  :: cluster
    integer,                               intent(in)  :: neighbor_idx, reg_idx, chk_idx, num_region
@@ -2305,6 +2313,7 @@ region(:)%maxv=miss
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  ! calculate reg_idx's neigh  bor's nyquist number while nyq_region(reg_idx) is known
    recursive subroutine calc_neighbor_nyquist_number(num_region, region, cluster, reg_idx)
+   use grd, only: region_name
    implicit none
    ! region(reg_idx)'s nyq_region calculates based on region(base_idx)
    integer,                              intent(in)    :: num_region, reg_idx
@@ -2898,6 +2907,7 @@ region(:)%maxv=miss
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine create_cluster(grid, num_region, region, num_cluster, cluster)
    use libradar, only: quick_sort
+   use grd, only: cluster_name, region_name, point_name
    implicit none
    type(t_grid),                               intent(inout) :: grid
    integer,                                    intent(in)    :: num_region

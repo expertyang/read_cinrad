@@ -435,6 +435,7 @@ contains
    radar_data%atmosAttenFactor = 0
    radar_data%calibConst       = 0
 
+   radar_data%if_have_loc=.false.
 
    radar_data%ifref=.false.
    radar_data%ifvel=.false.
@@ -641,56 +642,56 @@ contains
 
    end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-   subroutine write_grads_lld(filename, nr, na, lat, lon, dat, missv)
-   implicit none
-   character(len=*),   intent(in) :: filename
-   integer, intent(in) :: nr, na
-   real, dimension(nr,na) :: lat, lon, dat
-   real, intent(in) :: missv
-
-   character(len=800) :: fileout, ctlfile, datfile, mapfile
-
-   integer :: i, j, k, n
-   real    :: lat1, lon1, alt, lat0, lon0, alt0, range, height, elev, sfcrng, azim
-
-   integer           :: NFLAG, NLEV
-   character(len=8)  :: STID
-   real              :: TIM, VEL, SPW
-
-
-   write(ctlfile,"(A,I2.2,A)") trim(filename)//".ctl"
-   write(datfile,"(A,I2.2,A)") trim(filename)//".dat"
-   write(mapfile,"(A,I2.2,A)") trim(filename)//".map"
-   open(radar_unit,file=ctlfile,status="unknown")
-   write(radar_unit,"(A)") "DSET ^"//trim(datfile)
-   write(radar_unit,"(A)") "DTYPE  station"
-   write(radar_unit,"(A)") "OPTIONS sequential big_endian"
-   write(radar_unit,"(A)") "STNMAP "//trim(mapfile) 
-   write(radar_unit,"(A,F15.1)") "UNDEF  ",missv
-   write(radar_unit,"(A)") "TITLE  Station Data Sample"
-   write(radar_unit,"(A)") "TDEF   1 linear 00z01Jan2000 1hr"
-   write(radar_unit,"(A)") "VARS 1"
-   write(radar_unit,"(A)") "dat    0  99  dat "
-   write(radar_unit,"(A)") "ENDVARS"
-
-   open(radar_unit,file=datfile,form='unformatted',status="unknown")
-   write(*,"(2A)") "Writing file:", trim(datfile)
-   TIM = 0.0
-   NLEV = 1
-   NFLAG = 1
-   do i=1, nr
-   do j=1, na
-      write(STID,'(I4,I4)') i
-      write(radar_unit) STID,lat(i,j),lon(i,j),TIM,NLEV,NFLAG
-      write(radar_unit) dat(i,j)
-   enddo
-   enddo
-   NLEV = 0
-   WRITE(radar_unit) STID,lat(1,1),lon(1,1),TIM,NLEV,NFLAG
-   close(radar_unit)
-
-   end subroutine
+!
+!   subroutine write_grads_lld(filename, nr, na, lat, lon, dat, missv)
+!   implicit none
+!   character(len=*),   intent(in) :: filename
+!   integer, intent(in) :: nr, na
+!   real, dimension(nr,na) :: lat, lon, dat
+!   real, intent(in) :: missv
+!
+!   character(len=800) :: fileout, ctlfile, datfile, mapfile
+!
+!   integer :: i, j, k, n
+!   real    :: lat1, lon1, alt, lat0, lon0, alt0, range, height, elev, sfcrng, azim
+!
+!   integer           :: NFLAG, NLEV
+!   character(len=8)  :: STID
+!   real              :: TIM, VEL, SPW
+!
+!
+!   write(ctlfile,"(A,I2.2,A)") trim(filename)//".ctl"
+!   write(datfile,"(A,I2.2,A)") trim(filename)//".dat"
+!   write(mapfile,"(A,I2.2,A)") trim(filename)//".map"
+!   open(radar_unit,file=ctlfile,status="unknown")
+!   write(radar_unit,"(A)") "DSET ^"//trim(datfile)
+!   write(radar_unit,"(A)") "DTYPE  station"
+!   write(radar_unit,"(A)") "OPTIONS sequential big_endian"
+!   write(radar_unit,"(A)") "STNMAP "//trim(mapfile) 
+!   write(radar_unit,"(A,F15.1)") "UNDEF  ",missv
+!   write(radar_unit,"(A)") "TITLE  Station Data Sample"
+!   write(radar_unit,"(A)") "TDEF   1 linear 00z01Jan2000 1hr"
+!   write(radar_unit,"(A)") "VARS 1"
+!   write(radar_unit,"(A)") "dat    0  99  dat "
+!   write(radar_unit,"(A)") "ENDVARS"
+!
+!   open(radar_unit,file=datfile,form='unformatted',status="unknown")
+!   write(*,"(2A)") "Writing file:", trim(datfile)
+!   TIM = 0.0
+!   NLEV = 1
+!   NFLAG = 1
+!   do i=1, nr
+!   do j=1, na
+!      write(STID,'(I4,I4)') i
+!      write(radar_unit) STID,lat(i,j),lon(i,j),TIM,NLEV,NFLAG
+!      write(radar_unit) dat(i,j)
+!   enddo
+!   enddo
+!   NLEV = 0
+!   WRITE(radar_unit) STID,lat(1,1),lon(1,1),TIM,NLEV,NFLAG
+!   close(radar_unit)
+!
+!   end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
    subroutine read_radar_38(filename,radar_type,rdat)
@@ -3095,7 +3096,7 @@ contains
                   lon1=radar_data%rlon(i,j,k)
                   write(radar_unit) STID,lat1,lon1,TIM,NLEV,NFLAG
                   write(radar_unit) REF 
-write(79,*) i,i,k,lat1,lon1,ref
+!write(79,*) i,i,k,lat1,lon1,ref
                   if(sfcrng*RADIAN>radar_data%rgatesp(k))then
                     iazim=ceiling(sfcrng*RADIAN/radar_data%rgatesp(k)/2)
                      do i1=iazim,0,-1

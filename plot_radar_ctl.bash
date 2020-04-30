@@ -10,6 +10,9 @@ fi
 
 rdigsiz=0.01
 vdigsiz=0.003
+
+odigsiz=0.04
+
 for ctlfile in $@
 do
 var=`basename $ctlfile|cut -d"." -f4`
@@ -39,11 +42,21 @@ lon2=$lon+5
 'set mpdset hires cnhimap'
 'set gxout shaded'
 'set gxout stnmark'
-EOF
-if [ $var == "ref" ]
-then
-cat>>plot_radar.gs<<EOF
 * color map
+'set rgb 51   0 224 255'
+'set rgb 52   0 128 255'
+'set rgb 53  50   0 150'
+'set rgb 54   0 251 144'
+'set rgb 55   0 187   0'
+'set rgb 56   0 143   0'
+'set rgb 57 205 192 159'
+'set rgb 58 118 118 118'
+'set rgb 59 248 135   0'
+'set rgb 60 255 207   0'
+'set rgb 61 255 255   0'
+'set rgb 62 174   0   0'
+'set rgb 63 201 100   0'
+'set rgb 64 255   0   0'
 'set rgb 71  40 153 196'
 'set rgb 72  78 120 177'
 'set rgb 73   0 161 247'
@@ -60,6 +73,10 @@ cat>>plot_radar.gs<<EOF
 'set rgb 84 151   0 181'
 'set rgb 85 173 145 241'
 'set rgb 86 255 255 255'
+EOF
+if [ $var == "ref" ]
+then
+cat>>plot_radar.gs<<EOF
 'set cint 2'
 'set clevs    0 5  10 15 20 25 30 35 40 45 50 55 60 65 70 75'
 'set ccols 0 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86'
@@ -74,20 +91,6 @@ EOF
 elif [ $var == "vel" ]
 then
 cat >> plot_radar.gs<<EOF
-'set rgb 51   0 224 255'
-'set rgb 52   0 128 255'
-'set rgb 53  50   0 150'
-'set rgb 54   0 251 144'
-'set rgb 55   0 187   0'
-'set rgb 56   0 143   0'
-'set rgb 57 205 192 159'
-'set rgb 58 118 118 118'
-'set rgb 59 248 135   0'
-'set rgb 60 255 207   0'
-'set rgb 61 255 255   0'
-'set rgb 62 174   0   0'
-'set rgb 63 201 100   0'
-'set rgb 64 255   0   0'
 'set cint 2'
 'set clevs  -40 -30 -20 -15 -10 -5  0  5  10 15 20 30 40'
 'set ccols 51  52  53  54  55 56 57 58 59 60 61 62 63 64 '
@@ -111,6 +114,45 @@ cat >> plot_radar.gs<<EOF
 'draw title ID:$id $tim $cas spw LEV:$lev'
 'printim $cas.$id.$tim.spw.$lev.gif white x1000 y800'
 EOF
+elif [ $var == "obs" ]
+then
+cat>>plot_radar.gs<<EOF
+'set cint 2'
+'set clevs    0 5  10 15 20 25 30 35 40 45 50 55 60 65 70 75'
+'set ccols 0 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86'
+'set digsiz $odigsiz'
+'set cmark 3'
+
+'d z'
+'colmap.gs'
+'draw title ID:$id $tim $cas ref LEV:$lev'
+'printim $cas.$id.$tim.ref.$lev.gif white x1000 y800'
+
+'c'
+'set cint 2'
+'set clevs  -40 -30 -20 -15 -10 -5  0  5  10 15 20 30 40'
+'set ccols 51  52  53  54  55 56 57 58 59 60 61 62 63 64 '
+'set digsiz $odigsiz'
+'set cmark 3'
+
+'d v'
+'colmap.gs'
+'draw title ID:$id $tim $cas vel LEV:$lev'
+'printim $cas.$id.$tim.vel.$lev.gif white x1000 y800'
+
+'c'
+'set cint 2'
+'set clevs  0 0.5 1  2  3  4  8 12 16 20 24'
+'set ccols 0 57 56 55 54 58 59 60 61 62 63 64 '
+'set digsiz $odigsiz'
+'set cmark 3'
+
+'d w'
+'colmap.gs'
+'draw title ID:$id $tim $cas spw LEV:$lev'
+'printim $cas.$id.$tim.spw.$lev.gif white x1000 y800'
+EOF
+
 elif [ $var == "zdr" ]
 then
 cat >> plot_radar.gs<<EOF

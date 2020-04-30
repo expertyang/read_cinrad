@@ -211,9 +211,9 @@ end subroutine
    integer, dimension(1) :: loc1, loc2
 
    real :: minv, maxv, ix
-   real :: d1, d2, d3, d4
+   real :: d1, d2, d3, d4, r0, r1
    real :: w1, w2, w3, w4 
-! imeth=1,min; imeth=2, max; imeth=3, linear;
+! imeth=1,min; imeth=2, max; imeth=3, linear; imeth=4, nearest
 
    dat2=miss
 
@@ -322,13 +322,58 @@ end subroutine
                if(dat2(i1,j1)==miss) dat2(i1,j1)=d4
                dat2(i1,j1)=max(dat2(i1,j1),d4)
             endif
-         else
+         elseif(imeth==3)then
             dat2(i1,j1)=w1*d1+w2*d2+w3*d3+w4*d4
             if((d1==miss.and.w1/=0).or.&
                (d2==miss.and.w2/=0).or.&
                (d3==miss.and.w3/=0).or.&
                (d4==miss.and.w4/=0))then
               dat2(i1,j1)=miss
+            endif
+         elseif(imeth==4)then
+            if(d1/=miss)then
+               r1=sqrt(((ix  )**2)+((jy(j1)  )**2))
+               if(dat2(i1,j1)==miss)then
+                  dat2(i1,j1)=d1
+                  r0=r1
+               endif
+               if(r1<r0) then
+                  dat2(i1,j1)=d1
+                  r0=r1
+               endif
+            endif
+            if(d2/=miss)then
+               r1=sqrt(((ix-1)**2)+((jy(j1)  )**2))
+               if(dat2(i1,j1)==miss)then
+                  dat2(i1,j1)=d2
+                  r0=r1
+               endif
+               if(r1<r0) then
+                  dat2(i1,j1)=d2
+                  r0=r1
+               endif
+            endif
+            if(d3/=miss)then
+               r1=sqrt(((ix   )**2)+((jy(j1)-1)**2))
+               if(dat2(i1,j1)==miss)then
+                  dat2(i1,j1)=d3
+                  r0=r1
+               endif
+               if(r1<r0) then
+                  dat2(i1,j1)=d3
+                  r0=r1
+               endif
+            endif
+            if(d4/=miss)then
+               r1=sqrt(((ix-1)**2)+((jy(j1)-1)**2))
+               if(dat2(i1,j1)==miss)then
+                  dat2(i1,j1)=d4
+                  r0=r1
+               endif
+               if(r1<r0) then
+                  dat2(i1,j1)=d4
+                  r0=r1
+               endif
             endif
          endif
       enddo

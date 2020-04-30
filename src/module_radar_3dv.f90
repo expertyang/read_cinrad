@@ -43,6 +43,8 @@ contains
 
    integer :: qc_flag=2
    real    :: vel_err=4., ref_err=7.5
+ 
+   character(len=80) :: fileout
                       
    write(chtime,"(I4.4,'-',I2.2,'-',I2.2,'_',I2.2,':',I2.2,':',I2.2)")  rdat%year,rdat%month ,rdat%day   , &
                                  rdat%hour,rdat%minute,rdat%second
@@ -64,21 +66,21 @@ contains
    nx=maxval(rdat%rmax(1:maxelev))/dgrid*2+1
    ny=nx
    
-   allocate(    xs(nx      ))
-   allocate(    ys(   ny   ))
-   allocate(  latg(nx,ny   ))
-   allocate(  long(nx,ny   ))
-   allocate(iwrite(nx,ny   ))
-   allocate(    ks(nx,ny   ))
-   allocate(    ke(nx,ny   ))
-   allocate(  refg(nx,ny,nz))
-   allocate(  velg(nx,ny,nz))
-   allocate(  hgtg(nx,ny,nz))
-   allocate(  spwg(nx,ny,nz))
+   allocate(     xs(nx      ))
+   allocate(     ys(   ny   ))
+   allocate(   latg(nx,ny   ))
+   allocate(   long(nx,ny   ))
+   allocate( iwrite(nx,ny   ))
+   allocate(     ks(nx,ny   ))
+   allocate(     ke(nx,ny   ))
+   allocate(   refg(nx,ny,nz))
+   allocate(   velg(nx,ny,nz))
+   allocate(   hgtg(nx,ny,nz))
+   allocate(   spwg(nx,ny,nz))
    allocate(velg_qc(nx,ny,nz))
    allocate(refg_qc(nx,ny,nz))
-   allocate(  rngg(nx,ny,nz))
-   allocate(vn(nz))
+   allocate(   rngg(nx,ny,nz))
+   allocate(     vn(      nz))
 
    allocate(elvavg(maxelev))
 
@@ -254,20 +256,26 @@ contains
             iwrite(i,j)=1
          endif
 
-         do k=1, nz
-            if(abs(velg(i,j,k))>200..and.velg(i,j,k)/=miss)then
-               write(602,*) i,j,k,velg(i,j,k),latg(i,j),long(i,j),rngg(i,j,k), hgtg(i,j,k)
-            endif
-            if(velg(i,j,k)/=miss.and.spwg(i,j,k)/=miss.and.refg(i,j,k)/=miss)then
-               write(91,*) latg(i,j),long(i,j), hgtg(i,j,k), velg(i,j,k), vn(k), refg(i,j,k), spwg(i,j,k)
-            elseif(velg(i,j,k)/=miss.or.refg(i,j,k)/=miss)then
-               write(92,*) latg(i,j),long(i,j), hgtg(i,j,k), velg(i,j,k), vn(k), refg(i,j,k), spwg(i,j,k)
-            endif
-         enddo
+         !do k=1, nz
+         !   if(abs(velg(i,j,k))>200..and.velg(i,j,k)/=miss)then
+         !      !write(602,*) i,j,k,velg(i,j,k),latg(i,j),long(i,j),rngg(i,j,k), hgtg(i,j,k)
+         !   endif
+         !   if(velg(i,j,k)/=miss.and.spwg(i,j,k)/=miss.and.refg(i,j,k)/=miss)then
+         !      !write(91,*) latg(i,j),long(i,j), hgtg(i,j,k), velg(i,j,k), vn(k), refg(i,j,k), spwg(i,j,k)
+         !   elseif(velg(i,j,k)/=miss.or.refg(i,j,k)/=miss)then
+         !      !write(92,*) latg(i,j),long(i,j), hgtg(i,j,k), velg(i,j,k), vn(k), refg(i,j,k), spwg(i,j,k)
+         !   endif
+         !enddo
 
       enddo
    enddo
 
+   do k=1, nz
+      write(fileout,"('remap.',A,'.',I4.4,5I2.2,'.obs.',I2.2)") &
+                        trim(rdat%radar_id),rdat%year,rdat%month ,rdat%day   , &
+                        rdat%hour,rdat%minute,rdat%second, k
+      call write_grads_lld(fileout, nx, ny, latg, long, refg(:,:,k), velg(:,:,k), spwg(:,:,k), miss)
+   enddo
    ntotal=sum(iwrite)
    if(ntotal>0)then
       OPEN(radar_unit,FILE=filename,STATUS='unknown',FORM='formatted')
@@ -1206,4 +1214,66 @@ contains
   RETURN
   END SUBROUTINE remap2d
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+   subroutine write_grads_lld(filename, nx, ny, lat, lon, ref, vel, spw, missv)
+   use bytes, only: is_big_endian
+   implicit none
+   character(len=*),   intent(in) :: filename
+   integer, intent(in) :: nx, ny
+   real, dimension(nx,ny) :: lat, lon, ref, vel, spw
+   real, intent(in) :: missv
+
+   character(len=800) :: fileout, ctlfile, datfile, mapfile
+
+   integer :: i, j, k, n
+   integer, parameter :: radar_unit=901
+
+   integer           :: NFLAG, NLEV
+   character(len=8)  :: STID
+   real              :: TIM
+
+   character(len=80) :: endian
+
+   if(is_big_endian)then
+      endian="big_endian"
+   else
+      endian="little_endian"
+   endif
+
+
+   write(ctlfile,"(A,I2.2,A)") trim(filename)//".ctl"
+   write(datfile,"(A,I2.2,A)") trim(filename)//".dat"
+   write(mapfile,"(A,I2.2,A)") trim(filename)//".map"
+   open(radar_unit,file=ctlfile,status="unknown")
+   write(radar_unit,"(A)") "DSET ^"//trim(datfile)
+   write(radar_unit,"(A)") "DTYPE  station"
+   write(radar_unit,"(A)") "OPTIONS sequential "//trim(endian)
+   write(radar_unit,"(A)") "STNMAP "//trim(mapfile)
+   write(radar_unit,"(A,F15.1)") "UNDEF  ",missv
+   write(radar_unit,"(A)") "TITLE  Station Data Sample"
+   write(radar_unit,"(A)") "TDEF   1 linear 00z01Jan2000 1hr"
+   write(radar_unit,"(A)") "VARS 3"
+   write(radar_unit,"(A)") "z    0  99  dat "
+   write(radar_unit,"(A)") "v    0  99  dat "
+   write(radar_unit,"(A)") "w    0  99  dat "
+   write(radar_unit,"(A)") "ENDVARS"
+
+   open(radar_unit,file=datfile,form='unformatted',status="unknown")
+   write(*,"(2A)") "Writing file:", trim(datfile)
+   TIM = 0.0
+   NLEV = 1
+   NFLAG = 1
+   do i=1, nx
+   do j=1, ny
+      write(STID,'(I4,I4)') i
+      write(radar_unit) STID,lat(i,j),lon(i,j),TIM,NLEV,NFLAG
+      write(radar_unit) ref(i,j), vel(i,j), spw(i,j)
+   enddo
+   enddo
+   NLEV = 0
+   WRITE(radar_unit) STID,lat(1,1),lon(1,1),TIM,NLEV,NFLAG
+   close(radar_unit)
+
+   end subroutine
+
 end module 

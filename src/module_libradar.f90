@@ -1,3 +1,28 @@
+! Example for using libradar function:
+! 
+! program example 
+! use libradar
+! implicit none
+!  real :: elev,range
+!  real :: sfcrng,height
+!  real :: lon1,lon2,lat1,lat2
+!  real :: azim,dist,head
+! 
+!  lat1=35.
+!  lon1=-100.
+!  azim=30.
+! 
+!  height=2000.
+!  sfcrng=100000.
+!  call beamelv(height,sfcrng,elev,range)
+!  write(*,*) height,sfcrng,elev,range
+!  call beamhgt(elev,range,height,sfcrng)
+!  write(*,*) height,sfcrng,elev,range 
+!  call gcircle(lat1,lon1,azim,sfcrng,lat2,lon2)
+!  write(*,*) lat1,lon1,azim,sfcrng,lat2,lon2
+!  call disthead(lat1,lon1,lat2,lon2,head,dist)
+!  write(*,*) lat1,lon1,head,dist,lat2,lon2
+!  end program
 module libradar
 implicit none
 
@@ -367,31 +392,6 @@ contains
  !
    end subroutine uv2vr
 
-! Example for using above function:
-! 
-! program example 
-! use libradar
-! implicit none
-!  real :: elev,range
-!  real :: sfcrng,height
-!  real :: lon1,lon2,lat1,lat2
-!  real :: azim,dist,head
-! 
-!  lat1=35.
-!  lon1=-100.
-!  azim=30.
-! 
-!  height=2000.
-!  sfcrng=100000.
-!  call beamelv(height,sfcrng,elev,range)
-!  write(*,*) height,sfcrng,elev,range
-!  call beamhgt(elev,range,height,sfcrng)
-!  write(*,*) height,sfcrng,elev,range 
-!  call gcircle(lat1,lon1,azim,sfcrng,lat2,lon2)
-!  write(*,*) lat1,lon1,azim,sfcrng,lat2,lon2
-!  call disthead(lat1,lon1,lat2,lon2,head,dist)
-!  write(*,*) lat1,lon1,head,dist,lat2,lon2
-!
 
 !
 recursive subroutine quick_sort_real(a,d,n,s,e) ! little - big
