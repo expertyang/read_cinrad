@@ -27,6 +27,18 @@ contains
    integer :: i
 
    radar_file=""
+   wrf_file  =""
+   info_file ="radar_info.txt"
+
+   if_use_wrf           =.false. 
+   if_radar_qc          =.false. 
+   if_output_qc         =.false.
+   if_output_raw        =.false. 
+   if_output_obs        =.false. 
+   if_terminal_velocity =.false. 
+   if_output_model      =.false. 
+   if_debug             =.false.
+
    open(iunit, file=filename, status="old")
    write(*,"(2A)") "Reading ", trim(filename)
    read(iunit, nml=file )

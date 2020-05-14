@@ -353,6 +353,10 @@ contains
       deallocate(radar_data%nazim           )
       deallocate(radar_data%ifref           )
       deallocate(radar_data%ifvel           )
+      deallocate(radar_data%ifzdr           )
+      deallocate(radar_data%ifcc            )
+      deallocate(radar_data%ifkdp           )
+      deallocate(radar_data%ifsnr           )
       deallocate(radar_data%vmax            )
       deallocate(radar_data%rmax            )
       deallocate(radar_data%rgatesp         )
@@ -374,6 +378,11 @@ contains
       deallocate(radar_data%vlat            )
       deallocate(radar_data%valt            )
       deallocate(radar_data%atmosAttenFactor)
+      deallocate(radar_data%zdr             )
+      deallocate(radar_data%cc              )
+      deallocate(radar_data%fdp             )
+      deallocate(radar_data%kdp             )
+      deallocate(radar_data%snr             )
    endif
    !write(*,*) "deallocate complete!!!"
    allocate(radar_data%nazim                   (MaxCuts))
@@ -3252,6 +3261,10 @@ contains
       rdat_out%nazim           (k)=rdat_in%nazim           (k)
       rdat_out%ifref           (k)=rdat_in%ifref           (k)
       rdat_out%ifvel           (k)=rdat_in%ifvel           (k)
+      rdat_out%ifzdr           (k)=rdat_in%ifzdr           (k)
+      rdat_out%ifcc            (k)=rdat_in%ifcc            (k)
+      rdat_out%ifkdp           (k)=rdat_in%ifkdp           (k)
+      rdat_out%ifsnr           (k)=rdat_in%ifsnr           (k)
       rdat_out%rmax            (k)=rdat_in%rmax            (k)
       rdat_out%vmax            (k)=rdat_in%vmax            (k)
       rdat_out%rgatesp         (k)=rdat_in%rgatesp         (k)
@@ -3267,13 +3280,39 @@ contains
          rdat_out%rtilt (j,k)=rdat_in%rtilt (j,k)
          rdat_out%razim (j,k)=rdat_in%razim (j,k)
 
-         do i=1, rdat_in%nrgate(j,k)
-            rdat_out%ref(i,j,k)=rdat_in%ref(i,j,k)
-         enddo
-         do i=1, rdat_in%nvgate(j,k)
-            rdat_out%vel(i,j,k)=rdat_in%vel(i,j,k)
-            rdat_out%spw(i,j,k)=rdat_in%spw(i,j,k)
-         enddo
+         if(rdat_out%ifref(k))then
+            do i=1, rdat_in%nrgate(j,k)
+               rdat_out%ref(i,j,k)=rdat_in%ref(i,j,k)
+            enddo
+         endif
+         if(rdat_out%ifvel(k))then
+            do i=1, rdat_in%nvgate(j,k)
+               rdat_out%vel(i,j,k)=rdat_in%vel(i,j,k)
+               rdat_out%spw(i,j,k)=rdat_in%spw(i,j,k)
+            enddo
+         endif
+
+         if(rdat_out%ifzdr(k))then
+            do i=1, rdat_in%nrgate(j,k)
+               rdat_out%zdr(i,j,k)=rdat_in%zdr(i,j,k)
+            enddo
+         endif
+         if(rdat_out%ifcc (k))then
+            do i=1, rdat_in%nrgate(j,k)
+               rdat_out%cc (i,j,k)=rdat_in%cc (i,j,k)
+            enddo
+         endif
+         if(rdat_out%ifkdp(k))then
+            do i=1, rdat_in%nrgate(j,k)
+               rdat_out%kdp(i,j,k)=rdat_in%kdp(i,j,k)
+               rdat_out%fdp(i,j,k)=rdat_in%fdp(i,j,k)
+            enddo
+         endif
+         if(rdat_out%ifsnr(k))then
+            do i=1, rdat_in%nrgate(j,k)
+               rdat_out%snr(i,j,k)=rdat_in%snr(i,j,k)
+            enddo
+         endif
       enddo
    enddo
 

@@ -1,6 +1,6 @@
 &file
 wrf_file  ="wrfinput_d01"
-radar_file="dat/Z_RADR_I_Z9417_20180806180100_O_DOR_SA_CAP.bin",
+radar_file="dat/Z_RADR_I_Z9411_20180806170200_O_DOR_SA_CAP.bin",
 info_file ="radar_info.txt"
 /
 
@@ -12,4 +12,5 @@ if_output_raw        = .T.
 if_output_model      = .T.
 if_output_obs        = .T.
 if_terminal_velocity = .T.
+if_debug             = .T.
 /

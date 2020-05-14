@@ -142,6 +142,9 @@ contains
    end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine qc_radar(rdat,bkgvel)
+   use vdras_prep, only: varia
+   use radar_data, only: value_invalid
+   use config,     only: if_debug
    implicit none
    type(t_radar_data), intent(inout) :: rdat
    real, dimension(:,:,:), optional, intent(in) :: bkgvel
@@ -153,7 +156,7 @@ contains
    real :: min_z, max_z, min_v, max_v, min_w, max_w
    
    character(len=14) :: strTime
-   real, dimension(:,:,:), allocatable :: vel_old
+   real,    dimension(:,:,:), allocatable :: vel_old, var_ref, var_vel
    integer, dimension(:,:,:), allocatable :: vel_nn
    integer, dimension(:), allocatable :: nn
    integer :: np, nyq, m, n
@@ -165,12 +168,42 @@ contains
    REAL :: deg2rad
    deg2rad = atan(1.)/45.
 
+   write(strTime,"(I4.4,5I2.2)") rdat%year, rdat%month, rdat%day, rdat%hour, rdat%minute, rdat%second
 
    call calculate_radar_loc(rdat)
    call build_qc_radar(rdat,bkgvel)
    call anomalous_radial_radar(rdat)
    !call write_radar_csv          ("anr."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
-   !call write_radar_grads_station("anr."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
+   if(if_debug) call write_radar_grads_station("qc01-anr."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
+
+   allocate(var_ref(maxrgate, maxazim, maxelev))
+   call varia(rdat%ref,var_ref,2,maxrgate,maxazim,maxelev,refcheck)
+   allocate(var_vel(maxvgate, maxazim, maxelev))
+   call varia(rdat%vel,var_vel,2,maxvgate,maxazim,maxelev,velcheck)
+   do k=1,maxelev
+      do j=1,maxazim
+         if(rdat%ifref(k))then
+            write(801,"(I4,',',I4,921(',',F10.1))") k, j, rdat%razim(j,k), (var_ref(i,j,k),i=1, rdat%nrgate(j,k))
+            do i=1,maxrgate
+               if(rdat%ref(i,j,k)>refcheck.and.var_ref(i,j,k).gt.150.) then
+                  rdat%ref(i,j,k)=value_invalid
+               end if
+            enddo
+         endif
+         if(rdat%ifvel(k))then
+            write(801,"(I4,',',I4,921(',',F10.1))") k, j, rdat%razim(j,k), (var_vel(i,j,k),i=1, rdat%nvgate(j,k))
+            do i=1,maxvgate
+               if(rdat%vel(i,j,k)>velcheck.and.var_vel(i,j,k).gt.60.) then
+                  rdat%vel(i,j,k)=value_invalid
+               end if
+            enddo
+         endif
+      enddo
+   enddo
+   if(if_debug) call write_radar_grads_station("qc02-var."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
+   deallocate(var_ref)
+   deallocate(var_vel)
+   !if(if_debug) stop
 
    ! write(*,*) "after anomalous_radial"
    ! write(*,"(A5,6A10)") "k","Zmin","Zmax","Vmin","Vmax","Wmin","Wmax"
@@ -182,7 +215,7 @@ contains
    ! enddo
    call despeckle_radar(rdat)
    !call write_radar_csv          ("dsp."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
-   !call write_radar_grads_station("dsp."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
+   if(if_debug) call write_radar_grads_station("qc03-dsp."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
 
    ! write(*,*) "after despeckle"
    ! write(*,"(A5,6A10)") "k","Zmin","Zmax","Vmin","Vmax","Wmin","Wmax"
@@ -194,7 +227,7 @@ contains
    ! enddo
    call median_filter_radar(rdat)
    !call write_radar_csv          ("mfl."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
-   !call write_radar_grads_station("mfl."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
+   if(if_debug) call write_radar_grads_station("qc04-mfl."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
 
    ! write(*,*) "after median_filter"
    ! write(*,"(A5,6A10)") "k","Zmin","Zmax","Vmin","Vmax","Wmin","Wmax"
@@ -245,7 +278,8 @@ contains
    !enddo 
    !endif
    !call write_radar_csv          ("unf."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
-   !call write_radar_grads_station("unf."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
+   if(if_debug) call write_radar_grads_station("qc05-unf."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
+
     write(*,*) "after unfold"
     write(*,"(A5,6A15)") "k","Zmin","Zmax","Vmin","Vmax","Wmin","Wmax"
     do k=1, maxelev
@@ -281,9 +315,12 @@ contains
    !    call get_maxmin_2d(rdat%spw(:,:,k),min_w, max_w)
    !    write(*,"(I5,6F15.2)") k, min_z, max_z, min_v, max_v, min_w, max_w
    ! enddo
+   if(if_debug) call write_radar_grads_station("qc06-apd."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
+
    do i=1,5
       call despeckle_radar(rdat)
    enddo
+   if(if_debug) call write_radar_grads_station("qc07-dsp."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
    ! write(*,*) "after despeckle 5"
    ! write(*,"(A5,6A10)") "k","Zmin","Zmax","Vmin","Vmax","Wmin","Wmax"
    ! do k=1, maxelev
@@ -293,10 +330,6 @@ contains
    !    write(*,"(I5,6F15.2)") k, min_z, max_z, min_v, max_v, min_w, max_w
    ! enddo
                   
-
-   !call write_radar_csv          ("apd."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
-   !call write_radar_grads_station("apd."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
-   
    end subroutine
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -827,7 +860,7 @@ contains
                   endif
                enddo
                rms=sqrt(sum2/float(nref))
-               if( drefdr > 2.0E-05 .AND. drefdr < 9.0E-05 .AND. rms < 4.0) then
+               if( drefdr > 2.0E-05 .AND. drefdr < 9.0E-05 .AND. rms < 11.0) then
       
                   write(*,'(A,F7.1,A)') '*Anomalous radial detected (a).  Azim: ',rdat%razim(j,k),' degrees'
                   !

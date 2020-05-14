@@ -1950,7 +1950,7 @@ INNER :   do k = 1, vlevelnz
      enddo
      enddo
    
-     if(ngpt > 1) then
+     if(ngpt > (igrid+1)*(igrid+1)) then
         rlocm=rlocm/real(ngpt)
      else
         if(ngpt < 1) then

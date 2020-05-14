@@ -3104,8 +3104,8 @@ cluster(:)%maxv=miss
       if(region(i)%cluster==0) region(i)%cluster=imiss
    enddo
 
-   write(cluster_unit,"(A))") "================ Cluster List ================"
-   write(cluster_unit,"(A))") "cluster, num region,  num point,  area total"
+   write(cluster_unit,"(A)") "================ Cluster List ================"
+   write(cluster_unit,"(A)") "cluster, num region,  num point,  area total"
    do i=1, num_cluster
       !write(*,*) "cluster update",  i
       write(cluster_unit,"(A7,2(',',I11),',',F12.3)") &

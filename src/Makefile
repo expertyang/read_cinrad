@@ -29,7 +29,7 @@ OBJS = module_radar_data.o module_bytes.o        module_libradar.o \
        module_config.o     module_radar_region.o module_da_tools.o \
        module_grd.o        module_vdras_prep.o   module_radar_3dv.o
 
-TARGET  = read_cinrad proc_radar
+TARGET  = read_cinrad proc_radar test
 PACKAGE = read_cinrad
 
 .SUFFIXES: 
@@ -46,10 +46,15 @@ proc_radar.o:	$(OBJS)
 read_cinrad:	read_cinrad.o $(OBJS)	
 	$(FC) $(FFLAG) $(OBJS) $@.o -o $@ $(LIB)
 read_cinrad.o:	$(OBJS)
+
+test:	test.o $(OBJS)	
+	$(FC) $(FFLAG) $(OBJS) $@.o -o $@ $(LIB)
+test.o:	$(OBJS)
+
 module_radar_data.o:	module_bytes.o module_libradar.o module_date_pack.o
 module_radar_site.o:	module_string.o
 module_wrf_data.o:	module_map_utils.o module_libradar.o
-module_radar_qc.o:	module_radar_data.o module_libradar.o module_config.o module_radar_region.o
+module_radar_qc.o:	module_radar_data.o module_libradar.o module_config.o module_radar_region.o module_vdras_prep.o
 module_radar_region.o:	module_grd.o module_libradar.o
 module_da_tools.o:	module_wrf_data.o module_map_utils.o module_config.o	
 module_radar_3dv.o:	module_radar_data.o module_radar_qc.o module_libradar.o module_config.o
