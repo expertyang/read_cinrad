@@ -204,13 +204,13 @@ implicit none
       endif
    
       ! final gross check
-      where(rdat%ref<(20-0.004*(rdat%ralt-rdat%altitude)))
-           rdat%ref=missing_r
-      endwhere 
-      where(rdat%spw<1.5.or.rdat%spw>8.)
-           rdat%vel=missing_r
-           rdat%spw=missing_r
-      endwhere 
+!      where(rdat%ref<(20-0.004*(rdat%ralt-rdat%altitude)))
+!           rdat%ref=missing_r
+!      endwhere 
+!      where(rdat%spw<1.5.or.rdat%spw>8.)
+!           rdat%vel=missing_r
+!           rdat%spw=missing_r
+!      endwhere 
       where((rdat%ralt-rdat%altitude)>15000)
            rdat%ref=missing_r
       endwhere 
@@ -218,13 +218,13 @@ implicit none
            rdat%vel=missing_r
            rdat%spw=missing_r
       endwhere 
-      call get_dist_3d(rdat%ref,dist)
-      write(401,"(A,201(',',I20))") "limit:",dist
-      call get_dist_3d(rdat%spw,dist)
-      write(403,"(A,201(',',I20))") "limit:",dist
-      call get_dist_3d(rdat%vel,dist)
-      write(402,"(A,201(',',I20))") "limit:",dist
-      call write_radar_grads_station("limit."//trim(radar_id)//"."//trim(radar_time), rdat)
+!      call get_dist_3d(rdat%ref,dist)
+!      write(401,"(A,201(',',I20))") "limit:",dist
+!      call get_dist_3d(rdat%spw,dist)
+!      write(403,"(A,201(',',I20))") "limit:",dist
+!      call get_dist_3d(rdat%vel,dist)
+!      write(402,"(A,201(',',I20))") "limit:",dist
+!      call write_radar_grads_station("limit."//trim(radar_id)//"."//trim(radar_time), rdat)
    
    
       ! wrfda radar obs

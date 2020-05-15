@@ -179,11 +179,11 @@ contains
    allocate(var_ref(maxrgate, maxazim, maxelev))
    call varia(rdat%ref,var_ref,2,maxrgate,maxazim,maxelev,refcheck)
    allocate(var_vel(maxvgate, maxazim, maxelev))
-   call varia(rdat%vel,var_vel,2,maxvgate,maxazim,maxelev,velcheck)
+   call varia(rdat%vel,var_vel,1,maxvgate,maxazim,maxelev,velcheck)
    do k=1,maxelev
       do j=1,maxazim
          if(rdat%ifref(k))then
-            write(801,"(I4,',',I4,921(',',F10.1))") k, j, rdat%razim(j,k), (var_ref(i,j,k),i=1, rdat%nrgate(j,k))
+            if(if_debug) write(801,"(I4,',',I4,921(',',F10.1))") k, j, rdat%razim(j,k), (var_ref(i,j,k),i=1, rdat%nrgate(j,k))
             do i=1,maxrgate
                if(rdat%ref(i,j,k)>refcheck.and.var_ref(i,j,k).gt.150.) then
                   rdat%ref(i,j,k)=value_invalid
@@ -191,7 +191,8 @@ contains
             enddo
          endif
          if(rdat%ifvel(k))then
-            write(801,"(I4,',',I4,921(',',F10.1))") k, j, rdat%razim(j,k), (var_vel(i,j,k),i=1, rdat%nvgate(j,k))
+            if(if_debug) write(802,"(I4,',',I4,1001(',',F10.1))") k, j, rdat%razim(j,k), (var_vel(i,j,k),i=1, rdat%nvgate(j,k))
+            if(if_debug) write(803,"(I4,',',I4,1001(',',F10.1))") k, j, rdat%razim(j,k), (rdat%vel(i,j,k),i=1, rdat%nvgate(j,k))
             do i=1,maxvgate
                if(rdat%vel(i,j,k)>velcheck.and.var_vel(i,j,k).gt.60.) then
                   rdat%vel(i,j,k)=value_invalid
@@ -291,7 +292,7 @@ contains
 
    !call quad_refill_unfold_radar(rdat)
    !call write_radar_csv          ("qfu."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
-   !call write_radar_grads_station("qfu."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
+   !if(if_debug) call write_radar_grads_station("qc06-qfu."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
 
    !call copy_radar_data(rdat_in,rdat)
    write(*, *) 'Detect Anomalous Propagation for Ref...'
@@ -315,12 +316,12 @@ contains
    !    call get_maxmin_2d(rdat%spw(:,:,k),min_w, max_w)
    !    write(*,"(I5,6F15.2)") k, min_z, max_z, min_v, max_v, min_w, max_w
    ! enddo
-   if(if_debug) call write_radar_grads_station("qc06-apd."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
+   if(if_debug) call write_radar_grads_station("qc07-apd."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
 
    do i=1,5
       call despeckle_radar(rdat)
    enddo
-   if(if_debug) call write_radar_grads_station("qc07-dsp."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
+   if(if_debug) call write_radar_grads_station("qc08-dsp."// trim(rdat%radar_id)//"."//trim(strTime), rdat)
    ! write(*,*) "after despeckle 5"
    ! write(*,"(A5,6A10)") "k","Zmin","Zmax","Vmin","Vmax","Wmin","Wmax"
    ! do k=1, maxelev
@@ -1280,13 +1281,16 @@ contains
                   refvol(iigate,jazmref,kr2) > refcheck ) then
                   deltdbz=                            &
                     refvol(iigate,jazmref,kr2)-refvol(iigate,jjazim,kk)
-               else
+               elseif(refvol(iigate,jazmref,kr2)>refcheck)then
                  if(i_vcp==31 .or. i_vcp==32) then
                    deltdbz= -32.0-refvol(iigate,jjazim,kk)
                  else
                    deltdbz= -5.0-refvol(iigate,jjazim,kk)
                  endif
+               else
+                   deltdbz= 999.0
                endif
+               !if(if_debug) write(802,"(A,2I5,3F15.3)") "i,j,ref(i,j,kr),ref(i,j,kr2),deltdbz:",iigate, jjazim,refvol(iigate,jazmref,kr2), refvol(iigate,jjazim,kk), deltdbz
    !
    !  If the delta-dBZ check fails when comparing to the nearest gate,
    !  account for tilt of echoes by finding max of gates in the neighborhood.
@@ -1427,9 +1431,15 @@ contains
                if(spinchange >= spinthr) flags=flags+1
                if(deltdbz <= ddbzthr) flags=flags+1
                if(deltdbz <= ddbzthr2) flags=flags+1
-               if(abs(mvel) < mvelthr ) flags=flags+1
+               if(abs(mvel) < mvelthr .and. mvel /= 999.) flags=flags+1
    
                if(flags > 1 ) tmp(iigate,jjazim)=1.0
+               !if(if_debug.and.flags>1) write(802,"(2I5,2F15.3,A,F15.3,L4,F15.3,A,F15.3,L4,A,F15.3,L4,F15.3,A,F15.3,L4))") iigate, jjazim, &
+               ! refvol(iigate,jjazim,kk), spinchange, ">=",spinthr, spinchange >= spinthr, &
+               ! deltdbz,"<=", ddbzthr,deltdbz <= ddbzthr,&
+               !         "<=", ddbzthr2, deltdbz <= ddbzthr2, &
+               ! mvel,"<", mvelthr,abs(mvel) < mvelthr .and. mvel /= 999.
+
    
              endif  ! a valid reflectivity at iigate,jjazim,kk
            enddo  !iigate
@@ -1741,7 +1751,7 @@ contains
                azimijk=rdat%razim(jjazim,kkelev)
 
                dxthr=max(dxthr0,(2.1*azspc*rngvol(iigate,kkelev)))
-               write(*,*) ' dxthr =',(0.001*dxthr),' km'
+               if(if_debug) write(901,*) ' dxthr =',(0.001*dxthr),' km'
 
                varmax=-999.
                varmin=999.
@@ -1772,8 +1782,8 @@ contains
                      EXIT
                   endif
                enddo
-               write(*,*) ' Using levels',kbgn,' to ',kend,' at klevel:',kkelev
-               write(*,*) '    elvmnvol(kkelev):',elvmnvol(kkelev)
+               if(if_debug) write(901,*) ' Using levels',kbgn,' to ',kend,' at klevel:',kkelev
+               if(if_debug) write(901,*) '    elvmnvol(kkelev):',elvmnvol(kkelev)
           
                !  First pass, find min,max,mean,median.
 
@@ -1940,7 +1950,7 @@ contains
 
                if( kok == 0 ) then
                   kntflag=kntflag+1
-                  write(*,'(A,3I7,A,F10.2)') ' No neighbors near',           &
+                  if(if_debug) write(901,'(A,3I7,A,F10.2)') ' No neighbors near',           &
                          iigate,jjazim,kkelev,' Setting missing. Orig vel=', &
                          origvel
                   rdat%vel(iigate,jjazim,kkelev)=-777.
@@ -2348,7 +2358,7 @@ contains
                   varmean=rhsvar(1)/avar(1,1)
                   CALL GJELIM(n,avar,rhsvar,sol,work,work1d,eps,istatus)
                   fitvel=min(varmax,max(varmin,sol(1)))
-                  write(*,'(3F7.1,A,I8,4F7.1)') rdat%razim(jjazim,kkelev),       &
+                  if(if_debug) write(901,'(3F7.1,A,I8,4F7.1)') rdat%razim(jjazim,kkelev),       &
                        (0.001*rngvol(iigate,kkelev)),elvmnvol(kkelev),        &
                        ' Qf Analysis1:',knt,  &
                        varmin,varmean,varmax,fitvel
@@ -2363,7 +2373,7 @@ contains
                   enddo
                   CALL GJELIM(4,array,rhsv,solv,work,work1d,eps,istatus)
                   fitvel=min(varmax,max(varmin,solv(1)))
-                  write(*,'(3F7.1,A,I8,4F7.1)') rdat%razim(jjazim,kkelev),      &
+                  if(if_debug) write(901,'(3F7.1,A,I8,4F7.1)') rdat%razim(jjazim,kkelev),      &
                        (0.001*rngvol(iigate,kkelev)),elvmnvol(kkelev),       &
                        ' Qf Analysis2:',knt,  &
                        varmin,varmean,varmax,fitvel
@@ -2382,13 +2392,13 @@ contains
                if(abs(vardif) < thresh) then
                   kntfold=kntfold+1
                   rdat%vel(iigate,jjazim,kkelev) = tstvel
-                  write(*,'(A,F10.1,A,F10.1,A,F10.1)')            &
+                   if(if_debug) write(901,'(A,F10.1,A,F10.1,A,F10.1)')            &
                           ' Qf Unfold: Meas=',origvel,' Qfitvel=',     &
                                                fitvel,'  New=',tstvel
                else
                   kntflag=kntflag+1
                   rdat%vel(iigate,jjazim,kkelev) = -777.0
-                  write(*,'(A,F10.1,A,F10.1,A)')               &
+                  if(if_debug) write(901,'(A,F10.1,A,F10.1,A)')               &
                           ' Qf Marked bad: Meas=',origvel,' Qfitvel=', &
                                                    fitvel,'  New=-777.0'
                endif

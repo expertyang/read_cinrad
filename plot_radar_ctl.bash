@@ -8,10 +8,12 @@ then
    exit 0
 fi
 
-rdigsiz=0.01
-vdigsiz=0.003
+dlat=2.1
+dlon=`echo "scale=2;$dlat * 1.25"|bc`
 
-odigsiz=0.04
+rdigsiz=`echo "scale=4; 0.013*4/$dlat"|bc`
+vdigsiz=`echo "scale=4;0.0035*4/$dlat"|bc`
+odigsiz=`echo "scale=4; 0.045*4/$dlat"|bc`
 
 for ctlfile in $@
 do
@@ -33,10 +35,10 @@ stnmap -i $ctlfile
 
 cat>>plot_radar.gs<<EOF
 'open $ctlfile'
-lat1=$lat-4
-lat2=$lat+4
-lon1=$lon-5
-lon2=$lon+5
+lat1=$lat-$dlat
+lat2=$lat+$dlat
+lon1=$lon-$dlon
+lon2=$lon+$dlon
 'set lat ' lat1 ' ' lat2
 'set lon ' lon1 ' ' lon2
 'set mpdset hires cnhimap'
@@ -131,7 +133,7 @@ cat>>plot_radar.gs<<EOF
 'set clevs   -15 -10 -6 -3 0   3  6  9 12 15 18 21 24 27 31 35 40 45 50 55 60'
 'set ccols 0  71  72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91'
 'set digsiz $rdigsiz'
-'set cmark 3'
+'set cmark 5'
 
 'd z'
 'colmap.gs'
@@ -146,7 +148,7 @@ cat >> plot_radar.gs<<EOF
 'set clevs   -60 -45 -40 -35 -30 -25 -20 -15 -12 -9 -6 -3 -1  1  3  6  9 12 15 20 25 30 35 40 45 60'
 'set ccols 41 41  42  43  44  45  46  47  48  49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 '
 'set digsiz $vdigsiz'
-'set cmark 3'
+'set cmark 5'
 
 'd v'
 'colmap.gs'
@@ -158,7 +160,7 @@ cat >> plot_radar.gs<<EOF
 'set clevs    0 0.5  1  2  3  4  6  8  10 12 15 20'
 *'set ccols 0 53  54 52 55 51 56 50 57 49 58 48'
 'set digsiz $vdigsiz'
-'set cmark 3'
+'set cmark 5'
 
 'd w'
 'colmap.gs'
@@ -174,7 +176,7 @@ cat>>plot_radar.gs<<EOF
 'set clevs   -15 -10 -6 -3 0   3  6  9 12 15 18 21 24 27 31 35 40 45 50 55 60'
 'set ccols 0  71  72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91'
 'set digsiz $odigsiz'
-'set cmark 3'
+'set cmark 5'
 
 'd z'
 'colmap.gs'
@@ -188,7 +190,7 @@ cat>>plot_radar.gs<<EOF
 'set clevs   -60 -45 -40 -35 -30 -25 -20 -15 -12 -9 -6 -3 -1  1  3  6  9 12 15 20 25 30 35 40 45 60'
 'set ccols 41 41  42  43  44  45  46  47  48  49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 '
 'set digsiz $odigsiz'
-'set cmark 3'
+'set cmark 5'
 
 'd v'
 'colmap.gs'
@@ -204,7 +206,7 @@ cat>>plot_radar.gs<<EOF
 * 'set ccols 0 53  54 52 55 51 56 50 57 49 58 48'
 'set clevs    0 0.5  1  2  3  4  6  8  10 12 15 20'
 'set digsiz $odigsiz'
-'set cmark 3'
+'set cmark 5'
 
 'd w'
 'colmap.gs'
@@ -216,7 +218,7 @@ elif [ $var == "zdr" ]
 then
 cat >> plot_radar.gs<<EOF
 'set digsiz $rdigsiz'
-'set cmark 3'
+'set cmark 5'
 * 'set cint 0.1'
 'set clevs -5 -4 -3 -2 -1 0 1 2 3 4 5'
 'd zdr'
@@ -227,7 +229,7 @@ cat >> plot_radar.gs<<EOF
 'c'
 'set cint 0.1'
 'set digsiz $rdigsiz'
-'set cmark 3'
+'set cmark 5'
 'd cc'
 'colmap.gs'
 'draw title ID:$id $tim $cas cc LEV:$lev'
@@ -236,7 +238,7 @@ cat >> plot_radar.gs<<EOF
 'c'
 'set cint 30'
 'set digsiz $rdigsiz'
-'set cmark 3'
+'set cmark 5'
 'd fdp'
 'colmap.gs'
 'draw title ID:$id $tim $cas fdp LEV:$lev'
@@ -245,7 +247,7 @@ cat >> plot_radar.gs<<EOF
 'c'
 'set cint 0.5'
 'set digsiz $rdigsiz'
-'set cmark 3'
+'set cmark 5'
 'd kdp'
 'colmap.gs'
 'draw title ID:$id $tim $cas kdp LEV:$lev'
@@ -254,7 +256,7 @@ cat >> plot_radar.gs<<EOF
 
 'set cint 10'
 'set digsiz $rdigsiz'
-'set cmark 3'
+'set cmark 5'
 'd snr'
 'colmap.gs'
 'draw title ID:$id $tim $cas snr LEV:$lev'

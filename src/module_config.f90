@@ -7,14 +7,15 @@ character(len=1024), dimension(max_radar_file) :: radar_file
 integer                                        :: n_radar
 
 logical :: if_use_wrf, if_radar_qc, if_output_qc, if_output_raw, if_output_obs, &
-           if_terminal_velocity, if_output_model, if_debug=.false.
+           if_terminal_velocity, if_output_model, if_debug=.false., &
+           if_remove_lowref
 real    :: min_valid_nyquist=20
 real, parameter :: missing_r=-888888.
 
 namelist /file/ wrf_file, info_file, radar_file
 
 namelist /param/ if_use_wrf, if_radar_qc, if_output_qc, if_output_raw, if_output_obs, &
-                 if_terminal_velocity, if_output_model, if_debug, min_valid_nyquist
+                 if_terminal_velocity, if_output_model, if_debug, min_valid_nyquist, if_remove_lowref
 
 contains
 
@@ -37,6 +38,7 @@ contains
    if_output_obs        =.false. 
    if_terminal_velocity =.false. 
    if_output_model      =.false. 
+   if_remove_lowref     =.false. 
    if_debug             =.false.
 
    open(iunit, file=filename, status="old")
@@ -71,6 +73,7 @@ contains
    write(*,*) "if_output_model      = ", if_output_model
    write(*,*) "if_output_obs        = ", if_output_obs
    write(*,*) "if_terminal_velocity = ", if_terminal_velocity
+   write(*,*) "if_remove_lowref     = ", if_remove_lowref
    write(*,*) "if_debug             = ", if_debug
    write(*,*) "min_valid_nyquist    = ", min_valid_nyquist
    write(*,*) "/"

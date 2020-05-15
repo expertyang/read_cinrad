@@ -6,7 +6,7 @@ contains
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    subroutine write_radar_3dv(filename,rdat)
-   use config,     only: min_valid_nyquist
+   use config,     only: min_valid_nyquist, if_remove_lowref
    use radar_data, only: t_radar_data, radar_unit, get_maxmin_2d
    use radar_qc,   only: rngrvol, rngvvol, azmvol, elvvol, &
                          rxvvol, rxrvol, ryvvol, ryrvol, gjelim, &
@@ -204,10 +204,12 @@ contains
             
                ! remove clearsky echo.
                ! refg <20-0.004*(hgtg-radar_alt) 
-               height=hgtg(i,j,k)-rdat%altitude
-               if(refg(i,j,k)<(20-0.004*height))then
-                  refg_qc(i,j,k)=-1
-                  velg_qc(i,j,k)=-1
+               if(if_remove_lowref)then
+                  height=hgtg(i,j,k)-rdat%altitude
+                  if(refg(i,j,k)<(20-0.004*height))then
+                     refg_qc(i,j,k)=-1
+                     velg_qc(i,j,k)=-1
+                  endif
                endif
                ! ref noise
                !if(refg(i,j,k)<(-80.+20.*log(rngg(i,j,k))/log(10.)))then
