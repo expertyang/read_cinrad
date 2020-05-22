@@ -202,10 +202,10 @@ contains
                refg_qc(i,j,k)=0
                velg_qc(i,j,k)=0
             
+               height=hgtg(i,j,k)-rdat%altitude
                ! remove clearsky echo.
                ! refg <20-0.004*(hgtg-radar_alt) 
                if(if_remove_lowref)then
-                  height=hgtg(i,j,k)-rdat%altitude
                   if(refg(i,j,k)<(20-0.004*height))then
                      refg_qc(i,j,k)=-1
                      velg_qc(i,j,k)=-1
