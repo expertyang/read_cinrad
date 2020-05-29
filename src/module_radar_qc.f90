@@ -861,7 +861,9 @@ contains
                   endif
                enddo
                rms=sqrt(sum2/float(nref))
-               if( drefdr > 2.0E-05 .AND. drefdr < 9.0E-05 .AND. rms < 11.0) then
+               if(if_debug) write(701,"(2I5,4F10.3,E20.5,L10)") j, k, fngate,rdat%razim(j,k), vldratio, rms, drefdr,  rms < ((8-4.5)/(0.7-0.52)*(vldratio-0.52)+4.5)
+
+               if( drefdr > 2.0E-05 .AND. drefdr < 9.0E-05 .AND. ( rms < ((8-4.5)/(0.7-0.52)*(vldratio-0.52)+4.5))) then
       
                   write(*,'(A,F7.1,A)') '*Anomalous radial detected (a).  Azim: ',rdat%razim(j,k),' degrees'
                   !

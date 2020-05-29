@@ -209,6 +209,8 @@ contains
                   if(refg(i,j,k)<(20-0.004*height))then
                      refg_qc(i,j,k)=-1
                      velg_qc(i,j,k)=-1
+                     refg(i,j,k)=miss
+                     velg(i,j,k)=miss
                   endif
                endif
                ! ref noise
@@ -218,31 +220,39 @@ contains
                !endif
 
                ! spw noise
-               if(spwg(i,j,k)>8..or.spwg(i,j,k)<1.5)then
-               !  refg_qc(i,j,k)=-2
-                  velg_qc(i,j,k)=-2
-               endif
+               !if(spwg(i,j,k)>8..or.spwg(i,j,k)<1.5)then
+               !!  refg_qc(i,j,k)=-2
+               !   velg_qc(i,j,k)=-2
+               !   refg(i,j,k)=miss
+               !   velg(i,j,k)=miss
+               !endif
 
                ! range check
                if(rngg(i,j,k)>rdat%rmax(k))then
                   refg_qc(i,j,k)=-3
                   velg_qc(i,j,k)=-3
+                  refg(i,j,k)=miss
+                  velg(i,j,k)=miss
                endif
 
                ! height check
                if(height>15000)then
                   refg_qc(i,j,k)=-4
                   velg_qc(i,j,k)=-4
+                  refg(i,j,k)=miss
+                  velg(i,j,k)=miss
                endif
 
                ! interpolate error
                if(abs(velg(i,j,k))>200.)then
                   velg_qc(i,j,k)=-6
+                  velg(i,j,k)=miss
                endif
 
                ! nyquist vel
                if(abs(vn(k))<min_valid_nyquist)then
                   velg_qc(i,j,k)=-7
+                  velg(i,j,k)=miss
                endif
 
                if(ks(i,j)==0) ks(i,j)=k
@@ -250,6 +260,8 @@ contains
             else
                refg_qc(i,j,k)=-5
                velg_qc(i,j,k)=-5
+               refg(i,j,k)=miss
+               velg(i,j,k)=miss
             endif
          enddo
          if(ks(i,j)/=0)then
