@@ -2786,7 +2786,12 @@ contains
                  get_f_value(cut_config(k)%f_start_angle),& 
                  get_f_value(cut_config(k)%f_end_angle),&
                  get_f_value(cut_config(k)%f_angular_resolution)
-      rdat%rmax   (k) = min(get_i_value(cut_config(k)%i_maximum_range1),get_i_value(cut_config(k)%i_maximum_range2)) 
+      if(get_i_value(cut_config(k)%i_maximum_range2)>0)then
+      rdat%rmax   (k) =min(get_i_value(cut_config(k)%i_maximum_range1),get_i_value(cut_config(k)%i_maximum_range2))
+      else
+      rdat%rmax   (k) = get_i_value(cut_config(k)%i_maximum_range1)
+      endif
+
       rdat%rgatesp(k) = get_i_value(cut_config(k)%i_log_resolution)
       rdat%vgatesp(k) = get_i_value(cut_config(k)%i_doppler_resolution)
    enddo
